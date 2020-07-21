@@ -21,6 +21,7 @@ import java.io.IOException;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.TermEnum;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.util.ToStringUtils;
 
 /**
  * A Query that matches documents within an exclusive range. A RangeQuery
@@ -134,11 +135,7 @@ public class RangeQuery extends Query
         buffer.append(" TO ");
         buffer.append(upperTerm != null ? upperTerm.text() : "null");
         buffer.append(inclusive ? "]" : "}");
-        if (getBoost() != 1.0f)
-        {
-            buffer.append("^");
-            buffer.append(Float.toString(getBoost()));
-        }
+        buffer.append(ToStringUtils.boost(getBoost()));
         return buffer.toString();
     }
 
@@ -158,9 +155,13 @@ public class RangeQuery extends Query
 
     /** Returns a hash code value for this object.*/
     public int hashCode() {
-        return Float.floatToIntBits(getBoost()) ^
-            (lowerTerm != null ? lowerTerm.hashCode() : 0) ^
-            (upperTerm != null ? upperTerm.hashCode() : 0) ^
-            (this.inclusive ? 1 : 0);
+      int h = Float.floatToIntBits(getBoost());
+      h ^= lowerTerm != null ? lowerTerm.hashCode() : 0;
+      // reversible mix to make lower and upper position dependent and
+      // to prevent them from cancelling out.
+      h ^= (h << 25) | (h >>> 8);
+      h ^= upperTerm != null ? upperTerm.hashCode() : 0;
+      h ^= this.inclusive ? 0x2742E74A : 0;
+      return h;
     }
 }

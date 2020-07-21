@@ -16,7 +16,6 @@ package org.apache.lucene.search.highlight;
  */
 
 import java.io.IOException;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
 
@@ -24,10 +23,8 @@ import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.PhraseQuery;
+import org.apache.lucene.search.FilteredQuery;
 import org.apache.lucene.search.Query;
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.spans.SpanNearQuery;
 
 /**
  * Utility class used to extract the terms used in a query, plus any weights.
@@ -61,7 +58,7 @@ public final class QueryTermExtractor
 	 */
 	public static final WeightedTerm[] getIdfWeightedTerms(Query query, IndexReader reader, String fieldName) 
 	{
-	    WeightedTerm[] terms=getTerms(query,false);
+	    WeightedTerm[] terms=getTerms(query,false, fieldName);
 	    int totalNumDocs=reader.numDocs();
 	    for (int i = 0; i < terms.length; i++)
         {
@@ -85,76 +82,85 @@ public final class QueryTermExtractor
 	 *
 	 * @param query      Query to extract term texts from
 	 * @param prohibited <code>true</code> to extract "prohibited" terms, too
+	 * @param fieldName  The fieldName used to filter query terms
+   * @return an array of the terms used in a query, plus their weights.
+   */
+	public static final WeightedTerm[] getTerms(Query query, boolean prohibited, String fieldName) 
+	{
+		HashSet terms=new HashSet();
+		if(fieldName!=null)
+		{
+		    fieldName=fieldName.intern();
+		}
+		getTerms(query,terms,prohibited,fieldName);
+		return (WeightedTerm[]) terms.toArray(new WeightedTerm[0]);
+	}
+	
+	/**
+	 * Extracts all terms texts of a given Query into an array of WeightedTerms
+	 *
+	 * @param query      Query to extract term texts from
+	 * @param prohibited <code>true</code> to extract "prohibited" terms, too
    * @return an array of the terms used in a query, plus their weights.
    */
 	public static final WeightedTerm[] getTerms(Query query, boolean prohibited) 
 	{
-		HashSet terms=new HashSet();
-		getTerms(query,terms,prohibited);
-		return (WeightedTerm[]) terms.toArray(new WeightedTerm[0]);
-	}
+	    return getTerms(query,prohibited,null);
+	}	
 
-	private static final void getTerms(Query query, HashSet terms,boolean prohibited) 
+	//fieldname MUST be interned prior to this call
+	private static final void getTerms(Query query, HashSet terms,boolean prohibited, String fieldName) 
 	{
-		if (query instanceof BooleanQuery)
-			getTermsFromBooleanQuery((BooleanQuery) query, terms, prohibited);
-		else
-			if (query instanceof PhraseQuery)
-				getTermsFromPhraseQuery((PhraseQuery) query, terms);
-			else
-				if (query instanceof TermQuery)
-					getTermsFromTermQuery((TermQuery) query, terms);
-				else
-		        if(query instanceof SpanNearQuery)
-		            getTermsFromSpanNearQuery((SpanNearQuery) query, terms);
+       	try
+       	{
+    		if (query instanceof BooleanQuery)
+    			getTermsFromBooleanQuery((BooleanQuery) query, terms, prohibited, fieldName);
+    		else
+    			if(query instanceof FilteredQuery)
+    				getTermsFromFilteredQuery((FilteredQuery)query, terms,prohibited, fieldName);
+    			else
+    		{
+	       		HashSet nonWeightedTerms=new HashSet();
+	       		query.extractTerms(nonWeightedTerms);
+	       		for (Iterator iter = nonWeightedTerms.iterator(); iter.hasNext();)
+				{
+					Term term = (Term) iter.next();
+				    if((fieldName==null)||(term.field()==fieldName))
+					{
+						terms.add(new WeightedTerm(query.getBoost(),term.text()));
+					}
+				}
+    		}
+	      }
+	      catch(UnsupportedOperationException ignore)
+	      {
+	    	  //this is non-fatal for our purposes
+       	  }		        			        	
 	}
 
-	private static final void getTermsFromBooleanQuery(BooleanQuery query, HashSet terms, boolean prohibited)
+	/**
+	 * extractTerms is currently the only query-independent means of introspecting queries but it only reveals
+	 * a list of terms for that query - not the boosts each individual term in that query may or may not have.
+	 * "Container" queries such as BooleanQuery should be unwrapped to get at the boost info held
+	 * in each child element. 
+	 * Some discussion around this topic here:
+	 * http://www.gossamer-threads.com/lists/lucene/java-dev/34208?search_string=introspection;#34208
+	 * Unfortunately there seemed to be limited interest in requiring all Query objects to implement
+	 * something common which would allow access to child queries so what follows here are query-specific
+	 * implementations for accessing embedded query elements. 
+	 */
+	private static final void getTermsFromBooleanQuery(BooleanQuery query, HashSet terms, boolean prohibited, String fieldName)
 	{
 		BooleanClause[] queryClauses = query.getClauses();
-		int i;
-
-		for (i = 0; i < queryClauses.length; i++)
+		for (int i = 0; i < queryClauses.length; i++)
 		{
-			if (prohibited || !queryClauses[i].prohibited)
-				getTerms(queryClauses[i].query, terms, prohibited);
+			if (prohibited || queryClauses[i].getOccur()!=BooleanClause.Occur.MUST_NOT)
+				getTerms(queryClauses[i].getQuery(), terms, prohibited, fieldName);
 		}
-	}
-
-	private static final void getTermsFromPhraseQuery(PhraseQuery query, HashSet terms)
+	}	
+	private static void getTermsFromFilteredQuery(FilteredQuery query, HashSet terms, boolean prohibited, String fieldName)
 	{
-		Term[] queryTerms = query.getTerms();
-		int i;
-
-		for (i = 0; i < queryTerms.length; i++)
-		{
-			terms.add(new WeightedTerm(query.getBoost(),queryTerms[i].text()));
-		}
+		getTerms(query.getQuery(),terms,prohibited,fieldName);		
 	}
-
-	private static final void getTermsFromTermQuery(TermQuery query, HashSet terms)
-	{
-		terms.add(new WeightedTerm(query.getBoost(),query.getTerm().text()));
-	}
-
-    private static final void getTermsFromSpanNearQuery(SpanNearQuery query, HashSet terms){
-
-        Collection queryTerms = query.getTerms();
-
-        for(Iterator iterator = queryTerms.iterator(); iterator.hasNext();){
-
-            // break it out for debugging.
-
-            Term term = (Term) iterator.next();
-
-            String text = term.text();
-
-            terms.add(new WeightedTerm(query.getBoost(), text));
-
- 
-
-        }
-
-    }
-
+	
 }

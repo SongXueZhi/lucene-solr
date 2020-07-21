@@ -26,13 +26,16 @@ import java.io.File;
 import java.util.Date;
 import java.util.Arrays;
 
-class IndexHTML {
+/** Indexer for HTML files. */
+public class IndexHTML {
+  private IndexHTML() {}
 
   private static boolean deleting = false;	  // true during deletion pass
   private static IndexReader reader;		  // existing index
   private static IndexWriter writer;		  // new index being built
   private static TermEnum uidIter;		  // document id iterator
 
+  /** Indexer for HTML files.*/
   public static void main(String[] argv) {
     try {
       String index = "index";
@@ -102,7 +105,7 @@ class IndexHTML {
         while (uidIter.term() != null && uidIter.term().field() == "uid") {
           System.out.println("deleting " +
               HTMLDocument.uid2url(uidIter.term().text()));
-          reader.delete(uidIter.term());
+          reader.deleteDocuments(uidIter.term());
           uidIter.next();
         }
         deleting = false;
@@ -134,7 +137,7 @@ class IndexHTML {
           if (deleting) {			  // delete stale docs
             System.out.println("deleting " +
                 HTMLDocument.uid2url(uidIter.term().text()));
-            reader.delete(uidIter.term());
+            reader.deleteDocuments(uidIter.term());
           }
           uidIter.next();
         }

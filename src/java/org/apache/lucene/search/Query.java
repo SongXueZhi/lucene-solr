@@ -58,8 +58,9 @@ public abstract class Query implements java.io.Serializable, Cloneable {
    */
   public float getBoost() { return boost; }
 
-  /** Prints a query to a string, with <code>field</code> as the default field
-   * for terms.  <p>The representation used is one that is supposed to be readable
+  /** Prints a query to a string, with <code>field</code> assumed to be the 
+   * default field and omitted.
+   * <p>The representation used is one that is supposed to be readable
    * by {@link org.apache.lucene.queryParser.QueryParser QueryParser}. However,
    * there are the following limitations:
    * <ul>
@@ -86,7 +87,7 @@ public abstract class Query implements java.io.Serializable, Cloneable {
     throw new UnsupportedOperationException();
   }
 
-  /** Expert: Constructs an initializes a Weight for a top-level query. */
+  /** Expert: Constructs and initializes a Weight for a top-level query. */
   public Weight weight(Searcher searcher)
     throws IOException {
     Query query = searcher.rewrite(this);
@@ -97,7 +98,10 @@ public abstract class Query implements java.io.Serializable, Cloneable {
     return weight;
   }
 
-  /** Expert: called to re-write queries into primitive queries. */
+  /** Expert: called to re-write queries into primitive queries. For example,
+   * a PrefixQuery will be rewritten into a BooleanQuery that consists
+   * of TermQuerys.
+   */
   public Query rewrite(IndexReader reader) throws IOException {
     return this;
   }
@@ -148,7 +152,10 @@ public abstract class Query implements java.io.Serializable, Cloneable {
   }
 
   /**
-   * Expert: adds all terms occuring in this query to the terms set
+   * Expert: adds all terms occuring in this query to the terms set. Only
+   * works if this query is in its {@link #rewrite rewritten} form.
+   * 
+   * @throws UnsupportedOperationException if this query is not yet rewritten
    */
   public void extractTerms(Set terms) {
     // needs to be implemented by query subclasses

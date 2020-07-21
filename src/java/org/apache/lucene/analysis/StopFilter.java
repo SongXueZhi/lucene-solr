@@ -18,7 +18,6 @@ package org.apache.lucene.analysis;
 
 import java.io.IOException;
 import java.util.HashSet;
-import java.util.Hashtable;
 import java.util.Set;
 
 /**
@@ -27,27 +26,40 @@ import java.util.Set;
 
 public final class StopFilter extends TokenFilter {
 
-  private Set stopWords;
+  private final Set stopWords;
+  private final boolean ignoreCase;
+
+    /**
+     * Construct a token stream filtering the given input.
+     */
+    public StopFilter(TokenStream input, String [] stopWords)
+    {
+        this(input, stopWords, false);
+    }
 
   /**
    * Constructs a filter which removes words from the input
    * TokenStream that are named in the array of words.
    */
-  public StopFilter(TokenStream in, String[] stopWords) {
+  public StopFilter(TokenStream in, String[] stopWords, boolean ignoreCase) {
     super(in);
-    this.stopWords = makeStopSet(stopWords);
+    this.ignoreCase = ignoreCase;
+    this.stopWords = makeStopSet(stopWords, ignoreCase);
   }
 
-  /**
-   * Constructs a filter which removes words from the input
-   * TokenStream that are named in the Hashtable.
-   *
-   * @deprecated Use {@link #StopFilter(TokenStream, Set)} instead
-   */
-  public StopFilter(TokenStream in, Hashtable stopTable) {
-    super(in);
-    stopWords = new HashSet(stopTable.keySet());
-  }
+
+    /**
+     * Construct a token stream filtering the given input.
+     * @param input
+     * @param stopWords The set of Stop Words, as Strings.  If ignoreCase is true, all strings should be lower cased
+     * @param ignoreCase -Ignore case when stopping.  The stopWords set must be setup to contain only lower case words 
+     */
+    public StopFilter(TokenStream input, Set stopWords, boolean ignoreCase)
+    {
+        super(input);
+        this.ignoreCase = ignoreCase;
+        this.stopWords = stopWords;
+    }
 
   /**
    * Constructs a filter which removes words from the input
@@ -58,23 +70,7 @@ public final class StopFilter extends TokenFilter {
    * @see #makeStopSet(java.lang.String[])
    */
   public StopFilter(TokenStream in, Set stopWords) {
-    super(in);
-    this.stopWords = stopWords;
-  }
-
-  /**
-   * Builds a Hashtable from an array of stop words,
-   * appropriate for passing into the StopFilter constructor.
-   * This permits this table construction to be cached once when
-   * an Analyzer is constructed.
-   *
-   * @deprecated Use {@link #makeStopSet(String[])} instead.
-   */
-  public static final Hashtable makeStopTable(String[] stopWords) {
-    Hashtable stopTable = new Hashtable(stopWords.length);
-    for (int i = 0; i < stopWords.length; i++)
-      stopTable.put(stopWords[i], stopWords[i]);
-    return stopTable;
+    this(in, stopWords, false);
   }
 
   /**
@@ -82,13 +78,25 @@ public final class StopFilter extends TokenFilter {
    * appropriate for passing into the StopFilter constructor.
    * This permits this stopWords construction to be cached once when
    * an Analyzer is constructed.
+   * 
+   * @see #makeStopSet(java.lang.String[], boolean) passing false to ignoreCase
    */
   public static final Set makeStopSet(String[] stopWords) {
+    return makeStopSet(stopWords, false);
+  }
+    
+  /**
+   * 
+    * @param stopWords
+   * @param ignoreCase If true, all words are lower cased first.  
+   * @return a Set containing the words
+   */    
+  public static final Set makeStopSet(String[] stopWords, boolean ignoreCase) {
     HashSet stopTable = new HashSet(stopWords.length);
     for (int i = 0; i < stopWords.length; i++)
-      stopTable.add(stopWords[i]);
+      stopTable.add(ignoreCase ? stopWords[i].toLowerCase() : stopWords[i]);
     return stopTable;
-  }
+  }    
 
   /**
    * Returns the next input Token whose termText() is not a stop word.
@@ -96,8 +104,11 @@ public final class StopFilter extends TokenFilter {
   public final Token next() throws IOException {
     // return the first non-stop word found
     for (Token token = input.next(); token != null; token = input.next())
-      if (!stopWords.contains(token.termText))
-        return token;
+    {
+        String termText = ignoreCase ? token.termText.toLowerCase() : token.termText;
+        if (!stopWords.contains(termText))
+          return token;
+    }
     // reached EOS -- return null
     return null;
   }

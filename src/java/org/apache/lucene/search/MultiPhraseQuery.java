@@ -17,15 +17,14 @@ package org.apache.lucene.search;
  */
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.Vector;
+import java.util.*;
 
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.MultipleTermPositions;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.TermPositions;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.util.ToStringUtils;
 
 /**
  * MultiPhraseQuery is a generalized version of PhraseQuery, with an added
@@ -72,7 +71,7 @@ public class MultiPhraseQuery extends Query {
 
     add(terms, position);
   }
-  
+
   /**
    * Allows to specify the relative position of terms within the phrase.
    * 
@@ -95,7 +94,15 @@ public class MultiPhraseQuery extends Query {
     termArrays.add(terms);
     positions.addElement(new Integer(position));
   }
-  
+
+  /**
+   * Returns a List<Term[]> of the terms in the multiphrase.
+   * Do not modify the List or its contents.
+   */
+  public List getTermArrays() {
+	  return Collections.unmodifiableList(termArrays);
+  }
+
   /**
    * Returns the relative positions of terms in this phrase.
    */
@@ -105,6 +112,17 @@ public class MultiPhraseQuery extends Query {
       result[i] = ((Integer) positions.elementAt(i)).intValue();
     return result;
   }
+
+  // inherit javadoc
+  public void extractTerms(Set terms) {
+    for (Iterator iter = termArrays.iterator(); iter.hasNext();) {
+      Term[] arr = (Term[])iter.next();
+      for (int i=0; i<arr.length; i++) {
+        terms.add(arr[i]);
+      }
+    }
+  }
+
 
   private class MultiPhraseWeight implements Weight {
     private Similarity similarity;
@@ -144,23 +162,23 @@ public class MultiPhraseQuery extends Query {
     public Scorer scorer(IndexReader reader) throws IOException {
       if (termArrays.size() == 0)                  // optimize zero-term case
         return null;
-    
+
       TermPositions[] tps = new TermPositions[termArrays.size()];
       for (int i=0; i<tps.length; i++) {
         Term[] terms = (Term[])termArrays.get(i);
-      
+
         TermPositions p;
         if (terms.length > 1)
           p = new MultipleTermPositions(reader, terms);
         else
           p = reader.termPositions(terms[0]);
-      
+
         if (p == null)
           return null;
-      
+
         tps[i] = p;
       }
-    
+
       if (slop == 0)
         return new ExactPhraseScorer(this, tps, getPositions(), similarity,
                                      reader.norms(field));
@@ -168,14 +186,14 @@ public class MultiPhraseQuery extends Query {
         return new SloppyPhraseScorer(this, tps, getPositions(), similarity,
                                       slop, reader.norms(field));
     }
-    
+
     public Explanation explain(IndexReader reader, int doc)
       throws IOException {
-      Explanation result = new Explanation();
+      ComplexExplanation result = new ComplexExplanation();
       result.setDescription("weight("+getQuery()+" in "+doc+"), product of:");
 
       Explanation idfExpl = new Explanation(idf, "idf("+getQuery()+")");
-      
+
       // explain query weight
       Explanation queryExpl = new Explanation();
       queryExpl.setDescription("queryWeight(" + getQuery() + "), product of:");
@@ -185,18 +203,18 @@ public class MultiPhraseQuery extends Query {
         queryExpl.addDetail(boostExpl);
 
       queryExpl.addDetail(idfExpl);
-      
+
       Explanation queryNormExpl = new Explanation(queryNorm,"queryNorm");
       queryExpl.addDetail(queryNormExpl);
-      
+
       queryExpl.setValue(boostExpl.getValue() *
                          idfExpl.getValue() *
                          queryNormExpl.getValue());
 
       result.addDetail(queryExpl);
-     
+
       // explain field weight
-      Explanation fieldExpl = new Explanation();
+      ComplexExplanation fieldExpl = new ComplexExplanation();
       fieldExpl.setDescription("fieldWeight("+getQuery()+" in "+doc+
                                "), product of:");
 
@@ -212,11 +230,13 @@ public class MultiPhraseQuery extends Query {
       fieldNormExpl.setDescription("fieldNorm(field="+field+", doc="+doc+")");
       fieldExpl.addDetail(fieldNormExpl);
 
+      fieldExpl.setMatch(Boolean.valueOf(tfExpl.isMatch()));
       fieldExpl.setValue(tfExpl.getValue() *
                          idfExpl.getValue() *
                          fieldNormExpl.getValue());
-      
+
       result.addDetail(fieldExpl);
+      result.setMatch(fieldExpl.getMatch());
 
       // combine them
       result.setValue(queryExpl.getValue() * fieldExpl.getValue());
@@ -241,7 +261,7 @@ public class MultiPhraseQuery extends Query {
       return this;
     }
   }
-  
+
   protected Weight createWeight(Searcher searcher) throws IOException {
     return new MultiPhraseWeight(searcher);
   }
@@ -279,11 +299,28 @@ public class MultiPhraseQuery extends Query {
       buffer.append(slop);
     }
 
-    if (getBoost() != 1.0f) {
-      buffer.append("^");
-      buffer.append(Float.toString(getBoost()));
-    }
+    buffer.append(ToStringUtils.boost(getBoost()));
 
     return buffer.toString();
+  }
+
+
+  /** Returns true if <code>o</code> is equal to this. */
+  public boolean equals(Object o) {
+    if (!(o instanceof MultiPhraseQuery)) return false;
+    MultiPhraseQuery other = (MultiPhraseQuery)o;
+    return this.getBoost() == other.getBoost()
+      && this.slop == other.slop
+      && this.termArrays.equals(other.termArrays)
+      && this.positions.equals(other.positions);
+  }
+
+  /** Returns a hash code value for this object.*/
+  public int hashCode() {
+    return Float.floatToIntBits(getBoost())
+      ^ slop
+      ^ termArrays.hashCode()
+      ^ positions.hashCode()
+      ^ 0x4AC65113;
   }
 }

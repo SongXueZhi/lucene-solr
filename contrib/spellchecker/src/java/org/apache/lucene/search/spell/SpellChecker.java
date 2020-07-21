@@ -38,8 +38,8 @@ import java.util.*;
 
 /**
  *  <p>
- *	Spell Checker class  (Main class) <br/>
- * (initially inspired by the David Spencer code).
+ *   Spell Checker class  (Main class) <br/>
+ *   (initially inspired by the David Spencer code).
  *  </p>
  *  
  *  <p>Example Usage:
@@ -125,6 +125,7 @@ public class SpellChecker {
     public String[] suggestSimilar (String word, int num_sug, IndexReader ir, String field
     , boolean morePopular) throws IOException {
 
+        float min = this.min;
         final TRStringDistance sd=new TRStringDistance(word);
         final int lengthWord=word.length();
 
@@ -172,7 +173,7 @@ public class SpellChecker {
 
             sugword.string=hits.doc(i).get(F_WORD); // get orig word)
 
-            if (sugword.string==word) {
+            if (sugword.string.equals(word)) {
                 continue; // don't suggest a word for itself, that would be silly
             }
 
@@ -350,7 +351,7 @@ public class SpellChecker {
     }
 
 
-    protected void finalize () throws Throwable {
+    protected void finalize() throws Throwable {
         if (reader!=null) {
             reader.close();
         }

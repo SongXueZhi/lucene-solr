@@ -16,14 +16,13 @@ package org.apache.lucene.analysis;
  * limitations under the License.
  */
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.Reader;
-import java.io.BufferedReader;
+import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Hashtable;
-import java.util.Iterator;
 
 /**
  * Loader for text files that represent a list of stopwords.
@@ -87,47 +86,34 @@ public class WordlistLoader {
   }
 
   /**
-   * @param path      Path to the wordlist
-   * @param wordfile  Name of the wordlist
+   * Reads a stem dictionary. Each line contains:
+   * <pre>word<b>\t</b>stem</pre>
+   * (i.e. two tab seperated words)
    *
-   * @deprecated Use {@link #getWordSet(File)} instead
+   * @return stem dictionary that overrules the stemming algorithm
+   * @throws IOException 
    */
-  public static Hashtable getWordtable(String path, String wordfile) throws IOException {
-    return getWordtable(new File(path, wordfile));
-  }
-
-  /**
-   * @param wordfile  Complete path to the wordlist
-   *
-   * @deprecated Use {@link #getWordSet(File)} instead
-   */
-  public static Hashtable getWordtable(String wordfile) throws IOException {
-    return getWordtable(new File(wordfile));
-  }
-
-  /**
-   * @param wordfile  File object that points to the wordlist
-   *
-   * @deprecated Use {@link #getWordSet(File)} instead
-   */
-  public static Hashtable getWordtable(File wordfile) throws IOException {
-    HashSet wordSet = (HashSet)getWordSet(wordfile);
-    Hashtable result = makeWordTable(wordSet);
+  public static HashMap getStemDict(File wordstemfile) throws IOException {
+    if (wordstemfile == null)
+      throw new NullPointerException("wordstemfile may not be null");
+    HashMap result = new HashMap();
+    BufferedReader br = null;
+    FileReader fr = null;
+    try {
+      fr = new FileReader(wordstemfile);
+      br = new BufferedReader(fr);
+      String line;
+      while ((line = br.readLine()) != null) {
+        String[] wordstem = line.split("\t", 2);
+        result.put(wordstem[0], wordstem[1]);
+      }
+    } finally {
+      if (fr != null)
+        fr.close();
+      if (br != null)
+        br.close();
+    }
     return result;
   }
 
-  /**
-   * Builds a wordlist table, using words as both keys and values
-   * for backward compatibility.
-   *
-   * @param wordSet   stopword set
-   */
-  private static Hashtable makeWordTable(HashSet wordSet) {
-    Hashtable table = new Hashtable();
-    for (Iterator iter = wordSet.iterator(); iter.hasNext();) {
-      String word = (String)iter.next();
-      table.put(word, word);
-    }
-    return table;
-  }
 }

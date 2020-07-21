@@ -16,18 +16,15 @@ package org.apache.lucene.search;
  * limitations under the License.
  */
 
+import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.Term;
+import org.apache.lucene.util.SmallFloat;
+
 import java.io.IOException;
 import java.io.Serializable;
-
 import java.util.Collection;
 import java.util.Iterator;
-
-import org.apache.lucene.index.Term;
-
-import org.apache.lucene.index.IndexReader;       // for javadoc
-import org.apache.lucene.index.IndexWriter;       // for javadoc
-import org.apache.lucene.document.Field;          // for javadoc
-
 
 /** Expert: Scoring API.
  * <p>Subclasses implement search scoring.
@@ -44,7 +41,7 @@ import org.apache.lucene.document.Field;          // for javadoc
  *    ( {@link #tf(int) tf}(t in d) *
  *    {@link #idf(Term,Searcher) idf}(t)^2 *
  *    {@link Query#getBoost getBoost}(t in q) *
- *    {@link Field#getBoost getBoost}(t.field in d) *
+ *    {@link org.apache.lucene.document.Field#getBoost getBoost}(t.field in d) *
  *    {@link #lengthNorm(String,int) lengthNorm}(t.field in d) )
  *    </small></td>
  *    <td valign="middle" rowspan="2">&nbsp;*
@@ -116,7 +113,7 @@ public abstract class Similarity implements Serializable {
 
   static {
     for (int i = 0; i < 256; i++)
-      NORM_TABLE[i] = byteToFloat((byte)i);
+      NORM_TABLE[i] = SmallFloat.byte315ToFloat((byte)i);
   }
 
   /** Decodes a normalization factor stored in an index.
@@ -152,7 +149,7 @@ public abstract class Similarity implements Serializable {
    * <i>fieldName</i> of <i>doc</i>.
    * @return a normalization factor for hits on this field of this document
    *
-   * @see Field#setBoost(float)
+   * @see org.apache.lucene.document.Field#setBoost(float)
    */
   public abstract float lengthNorm(String fieldName, int numTokens);
 
@@ -170,7 +167,8 @@ public abstract class Similarity implements Serializable {
 
   /** Encodes a normalization factor for storage in an index.
    *
-   * <p>The encoding uses a five-bit exponent and three-bit mantissa, thus
+   * <p>The encoding uses a three-bit mantissa, a five-bit exponent, and
+   * the zero-exponent point at 15, thus
    * representing values from around 7x10^9 to 2x10^-9 with about one
    * significant decimal digit of accuracy.  Zero is also represented.
    * Negative numbers are rounded up to zero.  Values too large to represent
@@ -178,44 +176,12 @@ public abstract class Similarity implements Serializable {
    * small to represent are rounded up to the smallest positive representable
    * value.
    *
-   * @see Field#setBoost(float)
+   * @see org.apache.lucene.document.Field#setBoost(float)
+   * @see SmallFloat
    */
   public static byte encodeNorm(float f) {
-    return floatToByte(f);
+    return SmallFloat.floatToByte315(f);
   }
-
-  private static float byteToFloat(byte b) {
-    if (b == 0)                                   // zero is a special case
-      return 0.0f;
-    int mantissa = b & 7;
-    int exponent = (b >> 3) & 31;
-    int bits = ((exponent+(63-15)) << 24) | (mantissa << 21);
-    return Float.intBitsToFloat(bits);
-  }
-
-  private static byte floatToByte(float f) {
-    if (f < 0.0f)                                 // round negatives up to zero
-      f = 0.0f;
-
-    if (f == 0.0f)                                // zero is a special case
-      return 0;
-
-    int bits = Float.floatToIntBits(f);           // parse float into parts
-    int mantissa = (bits & 0xffffff) >> 21;
-    int exponent = (((bits >> 24) & 0x7f) - 63) + 15;
-
-    if (exponent > 31) {                          // overflow: use max value
-      exponent = 31;
-      mantissa = 7;
-    }
-
-    if (exponent < 0) {                           // underflow: use min value
-      exponent = 0;
-      mantissa = 1;
-    }
-
-    return (byte)((exponent << 3) | mantissa);    // pack into a byte
-   }
 
 
   /** Computes a score factor based on a term or phrase's frequency in a

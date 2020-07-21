@@ -26,12 +26,9 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Hashtable;
 
 import org.apache.lucene.index.IndexFileNameFilter;
-import org.apache.lucene.util.Constants;
 
 /**
  * Straightforward implementation of {@link Directory} as a directory of files.
- * <p>If the system property 'disableLuceneLocks' has the String value of
- * "true", lock creation will be disabled.
  *
  * @see Directory
  * @author Doug Cutting
@@ -47,8 +44,24 @@ public class FSDirectory extends Directory {
    */
   private static final Hashtable DIRECTORIES = new Hashtable();
 
-  private static final boolean DISABLE_LOCKS =
-      Boolean.getBoolean("disableLuceneLocks") || Constants.JAVA_1_1;
+  private static boolean disableLocks = false;
+
+  /**
+   * Set whether Lucene's use of lock files is disabled. By default, 
+   * lock files are enabled. They should only be disabled if the index
+   * is on a read-only medium like a CD-ROM.
+   */
+  public static void setDisableLocks(boolean doDisableLocks) {
+    FSDirectory.disableLocks = doDisableLocks;
+  }
+
+  /**
+   * Returns whether Lucene's use of lock files is disabled.
+   * @return true if locks are disabled, false if locks are enabled.
+   */
+  public static boolean getDisableLocks() {
+    return FSDirectory.disableLocks;
+  }
 
   /**
    * Directory specified by <code>org.apache.lucene.lockDir</code>
@@ -59,7 +72,7 @@ public class FSDirectory extends Directory {
       System.getProperty("java.io.tmpdir"));
 
   /** The default class which implements filesystem-based directories. */
-  private static final Class IMPL;
+  private static Class IMPL;
   static {
     try {
       String name =
@@ -67,7 +80,13 @@ public class FSDirectory extends Directory {
                            FSDirectory.class.getName());
       IMPL = Class.forName(name);
     } catch (ClassNotFoundException e) {
-      throw new RuntimeException("cannot load FSDirectory class: " + e.toString());
+      throw new RuntimeException("cannot load FSDirectory class: " + e.toString(), e);
+    } catch (SecurityException se) {
+      try {
+        IMPL = Class.forName(FSDirectory.class.getName());
+      } catch (ClassNotFoundException e) {
+        throw new RuntimeException("cannot load default FSDirectory class: " + e.toString(), e);
+      }
     }
   }
 
@@ -77,7 +96,7 @@ public class FSDirectory extends Directory {
     try {
       DIGESTER = MessageDigest.getInstance("MD5");
     } catch (NoSuchAlgorithmException e) {
-        throw new RuntimeException(e.toString());
+        throw new RuntimeException(e.toString(), e);
     }
   }
 
@@ -117,7 +136,7 @@ public class FSDirectory extends Directory {
         try {
           dir = (FSDirectory)IMPL.newInstance();
         } catch (Exception e) {
-          throw new RuntimeException("cannot load FSDirectory class: " + e.toString());
+          throw new RuntimeException("cannot load FSDirectory class: " + e.toString(), e);
         }
         dir.init(file, create);
         DIRECTORIES.put(file, dir);
@@ -146,6 +165,14 @@ public class FSDirectory extends Directory {
     else {
       lockDir = new File(LOCK_DIR);
     }
+    // Ensure that lockDir exists and is a directory.
+    if (!lockDir.exists()) {
+      if (!lockDir.mkdirs())
+        throw new IOException("Cannot create directory: " + lockDir.getAbsolutePath());
+    } else if (!lockDir.isDirectory()) {
+      throw new IOException("Found regular file where directory expected: " + 
+          lockDir.getAbsolutePath());
+    }
     if (create) {
       create();
     }
@@ -163,20 +190,24 @@ public class FSDirectory extends Directory {
       throw new IOException(directory + " not a directory");
 
     String[] files = directory.list(new IndexFileNameFilter());            // clear old files
+    if (files == null)
+      throw new IOException("Cannot read directory " + directory.getAbsolutePath());
     for (int i = 0; i < files.length; i++) {
       File file = new File(directory, files[i]);
       if (!file.delete())
-        throw new IOException("Cannot delete " + files[i]);
+        throw new IOException("Cannot delete " + file);
     }
 
     String lockPrefix = getLockPrefix().toString(); // clear old locks
     files = lockDir.list();
+    if (files == null)
+      throw new IOException("Cannot read lock directory " + lockDir.getAbsolutePath());
     for (int i = 0; i < files.length; i++) {
       if (!files[i].startsWith(lockPrefix))
         continue;
       File lockFile = new File(lockDir, files[i]);
       if (!lockFile.delete())
-        throw new IOException("Cannot delete " + files[i]);
+        throw new IOException("Cannot delete " + lockFile);
     }
   }
 
@@ -260,21 +291,23 @@ public class FSDirectory extends Directory {
         old.delete();
       }
       catch (IOException ioe) {
-        throw new IOException("Cannot rename " + old + " to " + nu);
+        IOException newExc = new IOException("Cannot rename " + old + " to " + nu);
+        newExc.initCause(ioe);
+        throw newExc;
       }
       finally {
         if (in != null) {
           try {
             in.close();
           } catch (IOException e) {
-            throw new RuntimeException("Cannot close input stream: " + e.toString());
+            throw new RuntimeException("Cannot close input stream: " + e.toString(), e);
           }
         }
         if (out != null) {
           try {
             out.close();
           } catch (IOException e) {
-            throw new RuntimeException("Cannot close output stream: " + e.toString());
+            throw new RuntimeException("Cannot close output stream: " + e.toString(), e);
           }
         }
       }
@@ -303,12 +336,7 @@ public class FSDirectory extends Directory {
   {'0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'};
 
   /** Constructs a {@link Lock} with the specified name.  Locks are implemented
-   * with {@link File#createNewFile() }.
-   *
-   * <p>In JDK 1.1 or if system property <I>disableLuceneLocks</I> is the
-   * string "true", locks are disabled.  Assigning this property any other
-   * string will <B>not</B> prevent creation of lock files.  This is useful for
-   * using Lucene on read-only medium, such as CD-ROM.
+   * with {@link File#createNewFile()}.
    *
    * @param name the name of the lock file
    * @return an instance of <code>Lock</code> holding the lock
@@ -323,7 +351,7 @@ public class FSDirectory extends Directory {
 
     return new Lock() {
       public boolean obtain() throws IOException {
-        if (DISABLE_LOCKS)
+        if (disableLocks)
           return true;
 
         if (!lockDir.exists()) {
@@ -335,12 +363,12 @@ public class FSDirectory extends Directory {
         return lockFile.createNewFile();
       }
       public void release() {
-        if (DISABLE_LOCKS)
+        if (disableLocks)
           return;
         lockFile.delete();
       }
       public boolean isLocked() {
-        if (DISABLE_LOCKS)
+        if (disableLocks)
           return false;
         return lockFile.exists();
       }
@@ -356,7 +384,7 @@ public class FSDirectory extends Directory {
     try {
       dirName = directory.getCanonicalPath();
     } catch (IOException e) {
-      throw new RuntimeException(e.toString());
+      throw new RuntimeException(e.toString(), e);
     }
 
     byte digest[];

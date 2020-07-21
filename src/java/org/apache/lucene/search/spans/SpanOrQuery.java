@@ -22,9 +22,12 @@ import java.util.List;
 import java.util.Collection;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.Set;
 
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.util.PriorityQueue;
+import org.apache.lucene.util.ToStringUtils;
+import org.apache.lucene.search.Query;
 
 /** Matches the union of its clauses.*/
 public class SpanOrQuery extends SpanQuery {
@@ -54,6 +57,10 @@ public class SpanOrQuery extends SpanQuery {
 
   public String getField() { return field; }
 
+  /** Returns a collection of all terms matched by this query.
+   * @deprecated use extractTerms instead
+   * @see #extractTerms(Set)
+   */
   public Collection getTerms() {
     Collection terms = new ArrayList();
     Iterator i = clauses.iterator();
@@ -62,6 +69,33 @@ public class SpanOrQuery extends SpanQuery {
       terms.addAll(clause.getTerms());
     }
     return terms;
+  }
+  
+  public void extractTerms(Set terms) {
+	    Iterator i = clauses.iterator();
+	    while (i.hasNext()) {
+	      SpanQuery clause = (SpanQuery)i.next();
+	      clause.extractTerms(terms);
+	    }
+  }
+  
+
+  public Query rewrite(IndexReader reader) throws IOException {
+    SpanOrQuery clone = null;
+    for (int i = 0 ; i < clauses.size(); i++) {
+      SpanQuery c = (SpanQuery)clauses.get(i);
+      SpanQuery query = (SpanQuery) c.rewrite(reader);
+      if (query != c) {                     // clause rewrote: must clone
+        if (clone == null)
+          clone = (SpanOrQuery) this.clone();
+        clone.clauses.set(i,query);
+      }
+    }
+    if (clone != null) {
+      return clone;                        // some clauses rewrote
+    } else {
+      return this;                         // no clauses rewrote
+    }
   }
 
   public String toString(String field) {
@@ -76,7 +110,27 @@ public class SpanOrQuery extends SpanQuery {
       }
     }
     buffer.append("])");
+    buffer.append(ToStringUtils.boost(getBoost()));
     return buffer.toString();
+  }
+
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+
+    final SpanOrQuery that = (SpanOrQuery) o;
+
+    if (!clauses.equals(that.clauses)) return false;
+    if (!field.equals(that.field)) return false;
+
+    return getBoost() == that.getBoost();
+  }
+
+  public int hashCode() {
+    int h = clauses.hashCode();
+    h ^= (h << 10) | (h >>> 23);
+    h ^= Float.floatToRawIntBits(getBoost());
+    return h;
   }
 
   private class SpanQueue extends PriorityQueue {

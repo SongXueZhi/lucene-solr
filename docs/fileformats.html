@@ -42,9 +42,6 @@ limitations under the License.
                     <td align="left">
 <a href="http://www.apache.org"><img src="http://lucene.apache.org/java/docs/images/asf-logo.gif" width="387" height="100" border="0"/></a>
 </td>
-<td align="center">
-<a href="http://apachecon.com"><img src="http://apache.org/images/ac2005eu_135x50.gif"/></a>
-</td>
 <td align="right">
 <a href="http://lucene.apache.org/"><img src="./images/lucene_green_300.gif" alt="Apache Lucene" border="0"/></a>
 </td>
@@ -92,20 +89,16 @@ limitations under the License.
 </li>
                     <li>    <a href="./benchmarks.html">Benchmarks</a>
 </li>
-                    <li>    <a href="http://issues.apache.org/bugzilla/buglist.cgi?bug_status=NEW&bug_status=ASSIGNED&bug_status=REOPENED&email1=&emailtype1=substring&emailassigned_to1=1&email2=&emailtype2=substring&emailreporter2=1&bugidtype=include&bug_id=&changedin=&votes=&chfieldfrom=&chfieldto=Now&chfieldvalue=&product=Lucene&short_desc=%5BPATCH%5D&short_desc_type=allwordssubstr&long_desc=&long_desc_type=allwordssubstr&bug_file_loc=&bug_file_loc_type=allwordssubstr&keywords=&keywords_type=anywords&field0-0-0=noop&type0-0-0=noop&value0-0-0=&cmdtype=doit&order=Importance">Patches</a>
-</li>
-                    <li>    <a href="http://issues.apache.org/bugzilla/buglist.cgi?bug_status=NEW&bug_status=ASSIGNED&bug_status=REOPENED&email1=&emailtype1=substring&emailassigned_to1=1&email2=&emailtype2=substring&emailreporter2=1&bugidtype=include&bug_id=&changedin=&votes=&chfieldfrom=&chfieldto=Now&chfieldvalue=&product=Lucene&short_desc=&short_desc_type=allwordssubstr&long_desc=&long_desc_type=allwordssubstr&bug_file_loc=&bug_file_loc_type=allwordssubstr&keywords=&keywords_type=anywords&field0-0-0=noop&type0-0-0=noop&value0-0-0=&cmdtype=doit&order=Importance">Lucene Bugs</a>
+                    <li>    <a href="http://issues.apache.org/jira/browse/LUCENE">Issue Tracker</a>
 </li>
                     <li>    <a href="./lucene-sandbox/">Lucene Sandbox</a>
 </li>
                 </ul>
             <p><strong>Download</strong></p>
         <ul>
-                    <li>    <a href="http://www.apache.org/dyn/closer.cgi/jakarta/lucene/binaries/">Binaries</a>
+                    <li>    <a href="http://www.apache.org/dyn/closer.cgi/lucene/java/">Releases</a>
 </li>
-                    <li>    <a href="http://www.apache.org/dyn/closer.cgi/jakarta/lucene/source/">Source Code</a>
-</li>
-                    <li>    <a href="http://svn.apache.org/viewcvs.cgi/lucene/">Source Repository</a>
+                    <li>    <a href="http://svn.apache.org/viewcvs.cgi/lucene/java/">Source Repository</a>
 </li>
                 </ul>
                         </td>
@@ -120,7 +113,10 @@ limitations under the License.
         <blockquote>
                                     <p>
                 This document defines the index file formats used
-                in Lucene version 1.4 and above.
+                in Lucene version 1.9.  If you are using a different
+		version of Lucene, please consult the copy of
+		<code>docs/fileformats.html</code> that was distributed
+		with the version you are using.
             </p>
                                                 <p>
                 Apache Lucene is written in Java, but several
@@ -1023,7 +1019,9 @@ limitations under the License.
         <blockquote>
                                     <p>
                     Lucene writes unicode
-                    character sequences using the standard UTF-8 encoding.
+                    character sequences using Java's
+                    <a href="http://en.wikipedia.org/wiki/UTF-8#Modified_UTF-8">"modified
+                    UTF-8 encoding"</a>.
                 </p>
                             </blockquote>
       </td></tr>
@@ -1080,10 +1078,10 @@ limitations under the License.
                     segment.
                 </p>
                                                 <p>
-                    Segments    --&gt; Format, Version, SegCount, &lt;SegName, SegSize&gt;<sup>SegCount</sup>
+                    Segments    --&gt; Format, Version, NameCounter, SegCount, &lt;SegName, SegSize&gt;<sup>SegCount</sup>
                 </p>
                                                 <p>
-                    Format, SegCount, SegSize    --&gt; UInt32
+                    Format, NameCounter, SegCount, SegSize    --&gt; UInt32
                 </p>
                                                 <p>
                     Version --&gt; UInt64
@@ -1097,6 +1095,9 @@ limitations under the License.
                                                 <p>
                     Version counts how often the index has been
                     changed by adding or deleting documents.
+                </p>
+                                                <p>
+                    NameCounter is used to generate names for new segment files.
                 </p>
                                                 <p>
                     SegName is the name of the segment, and is used as the file name prefix
@@ -1245,10 +1246,21 @@ limitations under the License.
                     FieldBits    --&gt; Byte
                 </p>
                                                 <p>
+	          <ul>
+                    <li>
                     The low-order bit is one for
-                    indexed fields, and zero for non-indexed fields.  The second lowest-order
+		    indexed fields, and zero for non-indexed fields.
+                    </li>
+		    <li>
+		    The second lowest-order
                     bit is one for fields that have term vectors stored, and zero for fields
-                    without term vectors.
+                    without term vectors.  
+	            </li>
+                        <p><b>Lucene &gt;= 1.9:</b></p>
+		    <li> If the third lowest-order bit is set (0x04), term positions are stored with the term vectors. </li>
+		    <li> If the fourth lowest-order bit is set (0x08), term offsets are stored with the term vectors. </li>
+		    <li> If the fifth lowest-order bit is set (0x10), norms are omitted for the indexed field. </li>
+		  </ul>
                 </p>
                                                 <p>
                     Fields are numbered by their order in this file.  Thus field zero is

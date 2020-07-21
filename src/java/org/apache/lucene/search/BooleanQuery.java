@@ -16,36 +16,25 @@ package org.apache.lucene.search;
  * limitations under the License.
  */
 
+import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.util.ToStringUtils;
+import org.apache.lucene.search.BooleanClause.Occur;
+
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.Vector;
-
-import org.apache.lucene.index.IndexReader;
 
 /** A Query that matches documents matching boolean combinations of other
   * queries, e.g. {@link TermQuery}s, {@link PhraseQuery}s or other
   * BooleanQuerys.
   */
 public class BooleanQuery extends Query {
-  
-  /** The maximum number of clauses permitted. Default value is 1024.
-   * Use the <code>org.apache.lucene.maxClauseCount</code> system property
-   * to override.
-   * <p>TermQuery clauses are generated from for example prefix queries and
-   * fuzzy queries. Each TermQuery needs some buffer space during search,
-   * so this parameter indirectly controls the maximum buffer requirements for
-   * query search.
-   * <p>When this parameter becomes a bottleneck for a Query one can use a
-   * Filter. For example instead of a {@link RangeQuery} one can use a
-   * {@link RangeFilter}.
-   * <p>Normally the buffers are allocated by the JVM. When using for example
-   * {@link org.apache.lucene.store.MMapDirectory} the buffering is left to
-   * the operating system.
+
+  /**
+
    */
-  public static int maxClauseCount =
-    Integer.parseInt(System.getProperty("org.apache.lucene.maxClauseCount",
-      "1024"));
+  private static int maxClauseCount = 1024;
 
   /** Thrown when an attempt is made to add more than {@link
    * #getMaxClauseCount()} clauses. This typically happens if
@@ -57,12 +46,26 @@ public class BooleanQuery extends Query {
   /** Return the maximum number of clauses permitted, 1024 by default.
    * Attempts to add more than the permitted number of clauses cause {@link
    * TooManyClauses} to be thrown.
-   * @see #maxClauseCount
+   * @see #setMaxClauseCount(int)
    */
   public static int getMaxClauseCount() { return maxClauseCount; }
 
-  /** Set the maximum number of clauses permitted. */
+  /** Set the maximum number of clauses permitted per BooleanQuery.
+   * Default value is 1024.
+   * <p>TermQuery clauses are generated from for example prefix queries and
+   * fuzzy queries. Each TermQuery needs some buffer space during search,
+   * so this parameter indirectly controls the maximum buffer requirements for
+   * query search.
+   * <p>When this parameter becomes a bottleneck for a Query one can use a
+   * Filter. For example instead of a {@link RangeQuery} one can use a
+   * {@link RangeFilter}.
+   * <p>Normally the buffers are allocated by the JVM. When using for example
+   * {@link org.apache.lucene.store.MMapDirectory} the buffering is left to
+   * the operating system.
+   */
   public static void setMaxClauseCount(int maxClauseCount) {
+    if (maxClauseCount < 1)
+      throw new IllegalArgumentException("maxClauseCount must be >= 1");
     BooleanQuery.maxClauseCount = maxClauseCount;
   }
 
@@ -105,28 +108,39 @@ public class BooleanQuery extends Query {
     return result;
   }
 
-  /** Adds a clause to a boolean query.  Clauses may be:
-   * <ul>
-   * <li><code>required</code> which means that documents which <i>do not</i>
-   * match this sub-query will <i>not</i> match the boolean query;
-   * <li><code>prohibited</code> which means that documents which <i>do</i>
-   * match this sub-query will <i>not</i> match the boolean query; or
-   * <li>neither, in which case matched documents are neither prohibited from
-   * nor required to match the sub-query. However, a document must match at
-   * least 1 sub-query to match the boolean query.
-   * </ul>
-   * It is an error to specify a clause as both <code>required</code> and
-   * <code>prohibited</code>.
+  /**
+   * Specifies a minimum number of the optional BooleanClauses
+   * which must be satisifed.
    *
-   * @deprecated use {@link #add(Query, BooleanClause.Occur)} instead:
-   * <ul>
-   *  <li>For add(query, true, false) use add(query, BooleanClause.Occur.MUST)
-   *  <li>For add(query, false, false) use add(query, BooleanClause.Occur.SHOULD)
-   *  <li>For add(query, false, true) use add(query, BooleanClause.Occur.MUST_NOT)
-   * </ul>
+   * <p>
+   * By default no optional clauses are neccessary for a match
+   * (unless there are no required clauses).  If this method is used,
+   * then the specified numebr of clauses is required.
+   * </p>
+   * <p>
+   * Use of this method is totally independant of specifying that
+   * any specific clauses are required (or prohibited).  This number will
+   * only be compared against the number of matching optional clauses.
+   * </p>
+   * <p>
+   * EXPERT NOTE: Using this method will force the use of BooleanWeight2,
+   * regardless of wether setUseScorer14(true) has been called.
+   * </p>
+   *
+   * @param min the number of optional clauses that must match
+   * @see #setUseScorer14
    */
-  public void add(Query query, boolean required, boolean prohibited) {
-    add(new BooleanClause(query, required, prohibited));
+  public void setMinimumNumberShouldMatch(int min) {
+    this.minNrShouldMatch = min;
+  }
+  protected int minNrShouldMatch = 0;
+
+  /**
+   * Gets the minimum number of the optional BooleanClauses
+   * which must be satisifed.
+   */
+  public int getMinimumNumberShouldMatch() {
+    return minNrShouldMatch;
   }
 
   /** Adds a clause to a boolean query.
@@ -175,8 +189,11 @@ public class BooleanQuery extends Query {
       for (int i = 0 ; i < weights.size(); i++) {
         BooleanClause c = (BooleanClause)clauses.elementAt(i);
         Weight w = (Weight)weights.elementAt(i);
+        // call sumOfSquaredWeights for all clauses in case of side effects
+        float s = w.sumOfSquaredWeights();         // sum sub weights
         if (!c.isProhibited())
-          sum += w.sumOfSquaredWeights();         // sum sub weights
+          // only add to sum for non-prohibited clauses
+          sum += s;
       }
 
       sum *= getBoost() * getBoost();             // boost each sub-weight
@@ -190,8 +207,8 @@ public class BooleanQuery extends Query {
       for (int i = 0 ; i < weights.size(); i++) {
         BooleanClause c = (BooleanClause)clauses.elementAt(i);
         Weight w = (Weight)weights.elementAt(i);
-        if (!c.isProhibited())
-          w.normalize(norm);
+        // normalize all clauses, (even if prohibited in case of side affects)
+        w.normalize(norm);
       }
     }
 
@@ -244,43 +261,68 @@ public class BooleanQuery extends Query {
 
     public Explanation explain(IndexReader reader, int doc)
       throws IOException {
-      Explanation sumExpl = new Explanation();
+      final int minShouldMatch =
+        BooleanQuery.this.getMinimumNumberShouldMatch();
+      ComplexExplanation sumExpl = new ComplexExplanation();
       sumExpl.setDescription("sum of:");
       int coord = 0;
       int maxCoord = 0;
       float sum = 0.0f;
+      boolean fail = false;
+      int shouldMatchCount = 0;
       for (int i = 0 ; i < weights.size(); i++) {
         BooleanClause c = (BooleanClause)clauses.elementAt(i);
         Weight w = (Weight)weights.elementAt(i);
         Explanation e = w.explain(reader, doc);
         if (!c.isProhibited()) maxCoord++;
-        if (e.getValue() > 0) {
+        if (e.isMatch()) {
           if (!c.isProhibited()) {
             sumExpl.addDetail(e);
             sum += e.getValue();
             coord++;
           } else {
-            return new Explanation(0.0f, "match prohibited");
+            Explanation r =
+              new Explanation(0.0f, "match on prohibited clause (" + c.getQuery().toString() + ")");
+            r.addDetail(e);
+            sumExpl.addDetail(r);
+            fail = true;
           }
+          if (c.getOccur().equals(Occur.SHOULD))
+            shouldMatchCount++;
         } else if (c.isRequired()) {
-          return new Explanation(0.0f, "match required");
+          Explanation r = new Explanation(0.0f, "no match on required clause (" + c.getQuery().toString() + ")");
+          r.addDetail(e);
+          sumExpl.addDetail(r);
+          fail = true;
         }
       }
+      if (fail) {
+        sumExpl.setMatch(Boolean.FALSE);
+        sumExpl.setValue(0.0f);
+        sumExpl.setDescription
+          ("Failure to meet condition(s) of required/prohibited clause(s)");
+        return sumExpl;
+      } else if (shouldMatchCount < minShouldMatch) {
+        sumExpl.setMatch(Boolean.FALSE);
+        sumExpl.setValue(0.0f);
+        sumExpl.setDescription("Failure to match minimum number "+
+                               "of optional clauses: " + minShouldMatch);
+        return sumExpl;
+      }
+      
+      sumExpl.setMatch(0 < coord ? Boolean.TRUE : Boolean.FALSE);
       sumExpl.setValue(sum);
-
-      if (coord == 1)                               // only one clause matched
-        sumExpl = sumExpl.getDetails()[0];          // eliminate wrapper
-
+      
       float coordFactor = similarity.coord(coord, maxCoord);
       if (coordFactor == 1.0f)                      // coord is no-op
         return sumExpl;                             // eliminate wrapper
       else {
-        Explanation result = new Explanation();
-        result.setDescription("product of:");
+        ComplexExplanation result = new ComplexExplanation(sumExpl.isMatch(),
+                                                           sum*coordFactor,
+                                                           "product of:");
         result.addDetail(sumExpl);
         result.addDetail(new Explanation(coordFactor,
                                          "coord("+coord+"/"+maxCoord+")"));
-        result.setValue(sum*coordFactor);
         return result;
       }
     }
@@ -297,7 +339,8 @@ public class BooleanQuery extends Query {
      *          and scores documents in document number order.
      */
     public Scorer scorer(IndexReader reader) throws IOException {
-      BooleanScorer2 result = new BooleanScorer2(similarity);
+      BooleanScorer2 result = new BooleanScorer2(similarity,
+                                                 minNrShouldMatch);
 
       for (int i = 0 ; i < weights.size(); i++) {
         BooleanClause c = (BooleanClause)clauses.elementAt(i);
@@ -315,16 +358,22 @@ public class BooleanQuery extends Query {
 
   /** Indicates whether to use good old 1.4 BooleanScorer. */
   private static boolean useScorer14 = false;
-  
+
   public static void setUseScorer14(boolean use14) {
     useScorer14 = use14;
   }
-  
+
   public static boolean getUseScorer14() {
     return useScorer14;
   }
-  
+
   protected Weight createWeight(Searcher searcher) throws IOException {
+
+    if (0 < minNrShouldMatch) {
+      // :TODO: should we throw an exception if getUseScorer14 ?
+      return new BooleanWeight2(searcher);
+    }
+
     return getUseScorer14() ? (Weight) new BooleanWeight(searcher)
                             : (Weight) new BooleanWeight2(searcher);
   }
@@ -380,32 +429,42 @@ public class BooleanQuery extends Query {
   /** Prints a user-readable version of this query. */
   public String toString(String field) {
     StringBuffer buffer = new StringBuffer();
-    if (getBoost() != 1.0) {
+    boolean needParens=(getBoost() != 1.0) || (getMinimumNumberShouldMatch()>0) ;
+    if (needParens) {
       buffer.append("(");
     }
 
     for (int i = 0 ; i < clauses.size(); i++) {
       BooleanClause c = (BooleanClause)clauses.elementAt(i);
       if (c.isProhibited())
-	buffer.append("-");
+        buffer.append("-");
       else if (c.isRequired())
-	buffer.append("+");
+        buffer.append("+");
 
       Query subQuery = c.getQuery();
       if (subQuery instanceof BooleanQuery) {	  // wrap sub-bools in parens
-	buffer.append("(");
-	buffer.append(c.getQuery().toString(field));
-	buffer.append(")");
+        buffer.append("(");
+        buffer.append(c.getQuery().toString(field));
+        buffer.append(")");
       } else
-	buffer.append(c.getQuery().toString(field));
+        buffer.append(c.getQuery().toString(field));
 
       if (i != clauses.size()-1)
-	buffer.append(" ");
+        buffer.append(" ");
     }
 
-    if (getBoost() != 1.0) {
-      buffer.append(")^");
-      buffer.append(getBoost());
+    if (needParens) {
+      buffer.append(")");
+    }
+
+    if (getMinimumNumberShouldMatch()>0) {
+      buffer.append('~');
+      buffer.append(getMinimumNumberShouldMatch());
+    }
+
+    if (getBoost() != 1.0f)
+    {
+      buffer.append(ToStringUtils.boost(getBoost()));
     }
 
     return buffer.toString();
@@ -417,12 +476,14 @@ public class BooleanQuery extends Query {
       return false;
     BooleanQuery other = (BooleanQuery)o;
     return (this.getBoost() == other.getBoost())
-        && this.clauses.equals(other.clauses);
+        && this.clauses.equals(other.clauses)
+        && this.getMinimumNumberShouldMatch() == other.getMinimumNumberShouldMatch();
   }
 
   /** Returns a hash code value for this object.*/
   public int hashCode() {
-    return Float.floatToIntBits(getBoost()) ^ clauses.hashCode();
+    return Float.floatToIntBits(getBoost()) ^ clauses.hashCode()
+           + getMinimumNumberShouldMatch();
   }
 
 }

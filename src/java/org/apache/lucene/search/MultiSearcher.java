@@ -146,12 +146,6 @@ public class MultiSearcher extends Searcher {
     return searchables[i].doc(n - starts[i]);	  // dispatch to searcher
   }
 
-  /** Call {@link #subSearcher} instead.
-   * @deprecated
-   */
-  public int searcherIndex(int n) {
-    return subSearcher(n);
-  }
 
   /** Returns index of the searcher for document <code>n</code> in the array
    * used to construct this searcher. */
@@ -208,8 +202,10 @@ public class MultiSearcher extends Searcher {
     ScoreDoc[] scoreDocs = new ScoreDoc[hq.size()];
     for (int i = hq.size()-1; i >= 0; i--)	  // put docs in array
       scoreDocs[i] = (ScoreDoc)hq.pop();
-
-    return new TopDocs(totalHits, scoreDocs);
+    
+    float maxScore = (totalHits==0) ? Float.NEGATIVE_INFINITY : scoreDocs[0].score;
+    
+    return new TopDocs(totalHits, scoreDocs, maxScore);
   }
 
   public TopFieldDocs search (Weight weight, Filter filter, int n, Sort sort)
@@ -217,10 +213,14 @@ public class MultiSearcher extends Searcher {
     FieldDocSortedHitQueue hq = null;
     int totalHits = 0;
 
+    float maxScore=Float.NEGATIVE_INFINITY;
+    
     for (int i = 0; i < searchables.length; i++) { // search each searcher
       TopFieldDocs docs = searchables[i].search (weight, filter, n, sort);
+      
       if (hq == null) hq = new FieldDocSortedHitQueue (docs.fields, n);
       totalHits += docs.totalHits;		  // update totalHits
+      maxScore = Math.max(maxScore, docs.getMaxScore());
       ScoreDoc[] scoreDocs = docs.scoreDocs;
       for (int j = 0; j < scoreDocs.length; j++) { // merge scoreDocs into hq
         ScoreDoc scoreDoc = scoreDocs[j];
@@ -234,7 +234,7 @@ public class MultiSearcher extends Searcher {
     for (int i = hq.size() - 1; i >= 0; i--)	  // put docs in array
       scoreDocs[i] = (ScoreDoc) hq.pop();
 
-    return new TopFieldDocs (totalHits, scoreDocs, hq.getFields());
+    return new TopFieldDocs (totalHits, scoreDocs, hq.getFields(), maxScore);
   }
 
 

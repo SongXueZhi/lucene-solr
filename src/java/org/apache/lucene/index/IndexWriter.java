@@ -796,4 +796,21 @@ public class IndexWriter {
     }
     directory.renameFile("deleteable.new", IndexFileNames.DELETABLE);
   }
+
+public static void setDefaultWriteLockTimeout(int i) {
+   //can't set final var
+}
+
+public static long getDefaultWriteLockTimeout() {
+	return WRITE_LOCK_TIMEOUT;
+}
+
+public static void setDefaultCommitLockTimeout(int i) {
+	//can't set final var
+	
+}
+
+public static long getDefaultCommitLockTimeout() {
+	return COMMIT_LOCK_TIMEOUT;
+}
 }

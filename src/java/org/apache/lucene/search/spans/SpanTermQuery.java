@@ -20,10 +20,12 @@ import java.io.IOException;
 
 import java.util.Collection;
 import java.util.ArrayList;
+import java.util.Set;
 
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.TermPositions;
+import org.apache.lucene.util.ToStringUtils;
 
 /** Matches spans containing a term. */
 public class SpanTermQuery extends SpanQuery {
@@ -36,18 +38,28 @@ public class SpanTermQuery extends SpanQuery {
   public Term getTerm() { return term; }
 
   public String getField() { return term.field(); }
-
+  
+  /** Returns a collection of all terms matched by this query.
+   * @deprecated use extractTerms instead
+   * @see #extractTerms(Set)
+   */
   public Collection getTerms() {
     Collection terms = new ArrayList();
     terms.add(term);
     return terms;
   }
+  public void extractTerms(Set terms) {
+	  terms.add(term);
+  }
 
   public String toString(String field) {
+    StringBuffer buffer = new StringBuffer();
     if (term.field().equals(field))
-      return term.text();
+      buffer.append(term.text());
     else
-      return term.toString();
+      buffer.append(term.toString());
+    buffer.append(ToStringUtils.boost(getBoost()));
+    return buffer.toString();
   }
 
   /** Returns true iff <code>o</code> is equal to this. */
@@ -61,7 +73,7 @@ public class SpanTermQuery extends SpanQuery {
 
   /** Returns a hash code value for this object.*/
   public int hashCode() {
-    return Float.floatToIntBits(getBoost()) ^ term.hashCode();
+    return Float.floatToIntBits(getBoost()) ^ term.hashCode() ^ 0xD23FE494;
   }
 
   public Spans getSpans(final IndexReader reader) throws IOException {

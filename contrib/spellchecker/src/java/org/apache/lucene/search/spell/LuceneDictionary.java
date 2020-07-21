@@ -31,12 +31,12 @@ import java.io.*;
  * @author Nicolas Maisonneuve
  */
 public class LuceneDictionary implements Dictionary {
-  IndexReader reader;
-  String field;
+  private IndexReader reader;
+  private String field;
 
   public LuceneDictionary(IndexReader reader, String field) {
     this.reader = reader;
-    this.field = field;
+    this.field = field.intern();
   }
 
   public final Iterator getWordsIterator() {
@@ -47,49 +47,51 @@ public class LuceneDictionary implements Dictionary {
   final class LuceneIterator implements Iterator {
     private TermEnum termEnum;
     private Term actualTerm;
-    private boolean has_next_called;
+    private boolean hasNextCalled;
 
-    public LuceneIterator() {
+    LuceneIterator() {
       try {
         termEnum = reader.terms(new Term(field, ""));
-      } catch (IOException ex) {
-        ex.printStackTrace();
+      } catch (IOException e) {
+        e.printStackTrace();
       }
     }
 
-
     public Object next() {
-      if (!has_next_called) {
+      if (!hasNextCalled) {
         hasNext();
       }
-      has_next_called = false;
+      hasNextCalled = false;
       return (actualTerm != null) ? actualTerm.text() : null;
     }
 
-
     public boolean hasNext() {
-      has_next_called = true;
+      if (hasNextCalled) {
+        return actualTerm != null;
+      }
+      hasNextCalled = true;
       try {
-        // if there is still words
+        // if there are no more words
         if (!termEnum.next()) {
           actualTerm = null;
           return false;
         }
-        //  if the next word are in the field
+        // if the next word is in the field
         actualTerm = termEnum.term();
-        String fieldt = actualTerm.field();
-        if (fieldt != field) {
+        String currentField = actualTerm.field();
+        if (currentField != field) {
           actualTerm = null;
           return false;
         }
         return true;
-      } catch (IOException ex) {
-        ex.printStackTrace();
+      } catch (IOException e) {
+        e.printStackTrace();
         return false;
       }
     }
 
     public void remove() {
-    };
+      throw new UnsupportedOperationException();
+    }
   }
 }
