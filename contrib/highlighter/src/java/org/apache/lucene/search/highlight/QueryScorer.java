@@ -48,6 +48,17 @@ public class QueryScorer implements Scorer
 	{
 		this(QueryTermExtractor.getTerms(query));
 	}
+	
+	/**
+	 * 
+	 * @param query a Lucene query (ideally rewritten using query.rewrite 
+	 * before being passed to this class and the searcher)
+	 * @param fieldName the Field name which is used to match Query terms
+	 */
+	public QueryScorer(Query query, String fieldName)
+	{
+		this(QueryTermExtractor.getTerms(query, false,fieldName));
+	}	
 
 	/**
 	 * 
@@ -67,8 +78,13 @@ public class QueryScorer implements Scorer
 		termsToFind = new HashMap();
 		for (int i = 0; i < weightedTerms.length; i++)
 		{
-			termsToFind.put(weightedTerms[i].term,weightedTerms[i]);
-			maxTermWeight=Math.max(maxTermWeight,weightedTerms[i].getWeight());
+			WeightedTerm existingTerm=(WeightedTerm) termsToFind.get(weightedTerms[i].term);
+			if( (existingTerm==null) ||(existingTerm.weight<weightedTerms[i].weight) )
+			{
+				//if a term is defined more than once, always use the highest scoring weight
+				termsToFind.put(weightedTerms[i].term,weightedTerms[i]);
+				maxTermWeight=Math.max(maxTermWeight,weightedTerms[i].getWeight());
+			}
 		}
 	}
 	

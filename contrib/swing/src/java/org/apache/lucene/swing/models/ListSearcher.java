@@ -22,6 +22,7 @@ import org.apache.lucene.analysis.WhitespaceAnalyzer;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.Fieldable;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Hits;
@@ -121,9 +122,9 @@ public class ListSearcher extends AbstractListModel {
                 //this will allow us to retrive the results later
                 //and map this list model's row to a row in the decorated
                 //list model
-                document.add(new Field(ROW_NUMBER, "" + row, true, true, true));
+                document.add(new Field(ROW_NUMBER, "" + row, Field.Store.YES, Field.Index.TOKENIZED));
                 //add the string representation of the row to the index
-                document.add(new Field(FIELD_NAME, String.valueOf(listModel.getElementAt(row)).toLowerCase(), true, true, true));
+                document.add(new Field(FIELD_NAME, String.valueOf(listModel.getElementAt(row)).toLowerCase(), Field.Store.YES, Field.Index.TOKENIZED));
                 writer.addDocument(document);
             }
             writer.optimize();
@@ -161,7 +162,8 @@ public class ListSearcher extends AbstractListModel {
             //build a query based on the fields, searchString and cached analyzer
             //NOTE: This is an area for improvement since the MultiFieldQueryParser
             // has some weirdness.
-            Query query = MultiFieldQueryParser.parse(searchString, fields, analyzer);
+            MultiFieldQueryParser parser = new MultiFieldQueryParser(fields, analyzer);
+            Query query =parser.parse(searchString);
             //run the search
             Hits hits = is.search(query);
             //reset this list model with the new results
@@ -189,7 +191,7 @@ public class ListSearcher extends AbstractListModel {
             //tabble model row that we are mapping to
             for (int t=0; t<hits.length(); t++){
                 Document document = hits.doc(t);
-                Field field = document.getField(ROW_NUMBER);
+                Fieldable field = document.getField(ROW_NUMBER);
                 rowToModelIndex.add(new Integer(field.stringValue()));
             }
         } catch (Exception e){

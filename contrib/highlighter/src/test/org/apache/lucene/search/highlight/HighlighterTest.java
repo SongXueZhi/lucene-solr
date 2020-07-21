@@ -38,13 +38,20 @@ import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.Term;
 import org.apache.lucene.queryParser.ParseException;
 import org.apache.lucene.queryParser.QueryParser;
+import org.apache.lucene.search.FilteredQuery;
 import org.apache.lucene.search.Hits;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.MultiSearcher;
+import org.apache.lucene.search.PhraseQuery;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.RangeFilter;
 import org.apache.lucene.search.Searcher;
+import org.apache.lucene.search.spans.SpanNearQuery;
+import org.apache.lucene.search.spans.SpanQuery;
+import org.apache.lucene.search.spans.SpanTermQuery;
 import org.apache.lucene.store.RAMDirectory;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
@@ -140,6 +147,47 @@ public class HighlighterTest extends TestCase implements Formatter
 		//Currently highlights "John" and "Kennedy" separately
 		assertTrue("Failed to find correct number of highlights " + numHighlights + " found", numHighlights == 2);
 	}
+	public void testGetBestFragmentsSpan() throws Exception
+	{
+		SpanQuery clauses[]={
+			new SpanTermQuery(new Term("contents","john")),
+			new SpanTermQuery(new Term("contents","kennedy")),
+			}; 
+		
+		SpanNearQuery snq=new SpanNearQuery(clauses,1,true);
+		doSearching(snq);
+		doStandardHighlights();
+		//Currently highlights "John" and "Kennedy" separately
+		assertTrue("Failed to find correct number of highlights " + numHighlights + " found", numHighlights == 2);
+	}
+	public void testGetBestFragmentsFilteredQuery() throws Exception
+	{
+		RangeFilter rf=new RangeFilter("contents","john","john",true,true);
+		SpanQuery clauses[]={
+				new SpanTermQuery(new Term("contents","john")),
+				new SpanTermQuery(new Term("contents","kennedy")),
+				}; 
+		SpanNearQuery snq=new SpanNearQuery(clauses,1,true);
+		FilteredQuery fq=new FilteredQuery(snq,rf);
+		
+		doSearching(fq);
+		doStandardHighlights();
+		//Currently highlights "John" and "Kennedy" separately
+		assertTrue("Failed to find correct number of highlights " + numHighlights + " found", numHighlights == 2);
+	}
+	public void testGetBestFragmentsFilteredPhraseQuery() throws Exception
+	{
+		RangeFilter rf=new RangeFilter("contents","john","john",true,true);
+		PhraseQuery pq=new PhraseQuery();
+		pq.add(new Term("contents","john"));
+		pq.add(new  Term("contents","kennedy"));
+		FilteredQuery fq=new FilteredQuery(pq,rf);
+		
+		doSearching(fq);
+		doStandardHighlights();
+		//Currently highlights "John" and "Kennedy" separately
+		assertTrue("Failed to find correct number of highlights " + numHighlights + " found", numHighlights == 2);
+	}
 
 	public void testGetBestFragmentsMultiTerm() throws Exception
 	{
@@ -181,7 +229,7 @@ public class HighlighterTest extends TestCase implements Formatter
 		for (int i = 0; i < hits.length(); i++)
 		{
     		String text = hits.doc(i).get(FIELD_NAME);
-    		highlighter.getBestFragments(analyzer, text, 10);
+    		highlighter.getBestFragments(analyzer,FIELD_NAME, text, 10);
 		}
 		assertTrue("Failed to find correct number of highlights " + numHighlights + " found", numHighlights == 4);
 
@@ -222,7 +270,8 @@ public class HighlighterTest extends TestCase implements Formatter
 		String srchkey = "football";
 
 		String s = "football-soccer in the euro 2004 footie competition";
-		Query query = QueryParser.parse(srchkey, "bookid", analyzer);
+		QueryParser parser=new QueryParser("bookid",analyzer);
+		Query query = parser.parse(srchkey);
 
 		Highlighter highlighter = new Highlighter(new QueryScorer(query));
 		TokenStream tokenStream =
@@ -289,7 +338,7 @@ public class HighlighterTest extends TestCase implements Formatter
 			new Highlighter(this,new QueryScorer(query));
 		highlighter.setMaxDocBytesToAnalyze(30);
 		TokenStream tokenStream=analyzer.tokenStream(FIELD_NAME,new StringReader(texts[0]));
-		String result = highlighter.getBestFragment(tokenStream,texts[0]);
+		highlighter.getBestFragment(tokenStream,texts[0]);
 		assertTrue("Setting MaxDocBytesToAnalyze should have prevented " +
 			"us from finding matches for this record: " + numHighlights +
 			 " found", numHighlights == 0);
@@ -302,7 +351,9 @@ public class HighlighterTest extends TestCase implements Formatter
 		//test to show how rewritten query can still be used
 		searcher = new IndexSearcher(ramDir);
 		Analyzer analyzer=new StandardAnalyzer();
-		Query query = QueryParser.parse("JF? or Kenned*", FIELD_NAME, analyzer);
+
+		QueryParser parser=new QueryParser(FIELD_NAME,analyzer);	
+		Query query = parser.parse("JF? or Kenned*");
 		System.out.println("Searching with primitive query");
 		//forget to set this and...
 		//query=query.rewrite(reader);
@@ -406,7 +457,7 @@ public class HighlighterTest extends TestCase implements Formatter
 		RAMDirectory ramDir1 = new RAMDirectory();
 		IndexWriter writer1 = new IndexWriter(ramDir1, new StandardAnalyzer(), true);
 		Document d = new Document();
-		Field f = new Field(FIELD_NAME, "multiOne", true, true, true);
+		Field f = new Field(FIELD_NAME, "multiOne", Field.Store.YES, Field.Index.TOKENIZED);
 		d.add(f);
 		writer1.addDocument(d);
 		writer1.optimize();
@@ -417,7 +468,7 @@ public class HighlighterTest extends TestCase implements Formatter
 		RAMDirectory ramDir2 = new RAMDirectory();
 		IndexWriter writer2 = new IndexWriter(ramDir2, new StandardAnalyzer(), true);
 		d = new Document();
-		f = new Field(FIELD_NAME, "multiTwo", true, true, true);
+		f = new Field(FIELD_NAME, "multiTwo", Field.Store.YES, Field.Index.TOKENIZED);
 		d.add(f);
 		writer2.addDocument(d);
 		writer2.optimize();
@@ -430,7 +481,8 @@ public class HighlighterTest extends TestCase implements Formatter
 		searchers[0] = new IndexSearcher(ramDir1);
 		searchers[1] = new IndexSearcher(ramDir2);
 		MultiSearcher multiSearcher=new MultiSearcher(searchers);
-		query = QueryParser.parse("multi*", FIELD_NAME, new StandardAnalyzer());
+		QueryParser parser=new QueryParser(FIELD_NAME, new StandardAnalyzer());
+		query = parser.parse("multi*");
 		System.out.println("Searching for: " + query.toString(FIELD_NAME));
 		//at this point the multisearcher calls combine(query[])
 		hits = multiSearcher.search(query);
@@ -455,9 +507,36 @@ public class HighlighterTest extends TestCase implements Formatter
 		}
 		assertTrue("Failed to find correct number of highlights " + numHighlights + " found", numHighlights == 2);
 
-
-
 	}
+	
+	public void testFieldSpecificHighlighting() throws IOException, ParseException
+	{
+		String docMainText="fred is one of the people";
+		QueryParser parser=new QueryParser(FIELD_NAME,analyzer);
+		Query query=parser.parse("fred category:people");
+		
+		//highlighting respects fieldnames used in query
+		QueryScorer fieldSpecificScorer=new QueryScorer(query, "contents");
+		Highlighter fieldSpecificHighlighter =
+			new Highlighter(new SimpleHTMLFormatter(),fieldSpecificScorer);
+		fieldSpecificHighlighter.setTextFragmenter(new NullFragmenter());
+		String result=fieldSpecificHighlighter.getBestFragment(analyzer,FIELD_NAME,docMainText);
+		assertEquals("Should match",result,"<B>fred</B> is one of the people");
+		
+		//highlighting does not respect fieldnames used in query
+		QueryScorer fieldInSpecificScorer=new QueryScorer(query);
+		Highlighter fieldInSpecificHighlighter =
+			new Highlighter(new SimpleHTMLFormatter(),fieldInSpecificScorer);
+		fieldInSpecificHighlighter.setTextFragmenter(new NullFragmenter());
+		result=fieldInSpecificHighlighter.getBestFragment(analyzer,FIELD_NAME,docMainText);
+		assertEquals("Should match",result,"<B>fred</B> is one of the <B>people</B>");
+		
+		
+		reader.close();
+		
+	}
+	
+	
 
 /*
 
@@ -505,16 +584,21 @@ public class HighlighterTest extends TestCase implements Formatter
 		numHighlights++; //update stats used in assertions
 		return "<b>" + originalText + "</b>";
 	}
-
+	
 	public void doSearching(String queryString) throws Exception
 	{
+		QueryParser parser=new QueryParser(FIELD_NAME, new StandardAnalyzer());
+		query = parser.parse(queryString);
+		doSearching(query);
+	}
+	public void doSearching(Query unReWrittenQuery) throws Exception
+	{
 		searcher = new IndexSearcher(ramDir);
-		query = QueryParser.parse(queryString, FIELD_NAME, new StandardAnalyzer());
 		//for any multi-term queries to work (prefix, wildcard, range,fuzzy etc) you must use a rewritten query!
-		query=query.rewrite(reader);
+		query=unReWrittenQuery.rewrite(reader);
 		System.out.println("Searching for: " + query.toString(FIELD_NAME));
 		hits = searcher.search(query);
-	}
+	}	
 
 	void doStandardHighlights() throws Exception
 	{
@@ -558,7 +642,7 @@ public class HighlighterTest extends TestCase implements Formatter
 	private void addDoc(IndexWriter writer, String text) throws IOException
 	{
 		Document d = new Document();
-		Field f = new Field(FIELD_NAME, text, true, true, true);
+		Field f = new Field(FIELD_NAME, text,Field.Store.YES, Field.Index.TOKENIZED);
 		d.add(f);
 		writer.addDocument(d);
 

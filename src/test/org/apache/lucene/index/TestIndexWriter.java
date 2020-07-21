@@ -21,13 +21,18 @@ public class TestIndexWriter extends TestCase
 {
     public void testDocCount() throws IOException
     {
+    	System.out.println("aaa");
         Directory dir = new RAMDirectory();
 
         IndexWriter writer = null;
         IndexReader reader = null;
         int i;
 
+        IndexWriter.setDefaultWriteLockTimeout(2000);
+        IndexWriter.setDefaultCommitLockTimeout(2000);
+       
         writer  = new IndexWriter(dir, new WhitespaceAnalyzer(), true);
+
 
         // add 100 documents
         for (i = 0; i < 100; i++) {
@@ -35,11 +40,20 @@ public class TestIndexWriter extends TestCase
         }
         assertEquals(100, writer.docCount());
         writer.close();
-
+        
+        new Thread() {
+        	public void run() {
+        		IndexWriter.setDefaultWriteLockTimeout(1000);
+                IndexWriter.setDefaultCommitLockTimeout(1000);
+                assertEquals(1000, IndexWriter.getDefaultWriteLockTimeout());
+                assertEquals(1000, IndexWriter.getDefaultCommitLockTimeout());
+        	}
+        }.start();
+        
         // delete 40 documents
         reader = IndexReader.open(dir);
         for (i = 0; i < 40; i++) {
-            reader.delete(i);
+            reader.deleteDocument(i);
         }
         reader.close();
 

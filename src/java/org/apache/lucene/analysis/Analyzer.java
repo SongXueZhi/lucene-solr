@@ -34,20 +34,25 @@ public abstract class Analyzer {
     compatibility with older version.  Override to allow Analyzer to choose 
     strategy based on document and/or field.  Must be able to handle null
     field name for backward compatibility. */
-  public TokenStream tokenStream(String fieldName, Reader reader)
-  {
-	  // implemented for backward compatibility
-	  return tokenStream(reader);
-  }
-  
-  /** Creates a TokenStream which tokenizes all the text in the provided
-   *  Reader.  Provided for backward compatibility only.
-   * @deprecated use tokenStream(String, Reader) instead.
-   * @see #tokenStream(String, Reader)
+  public abstract TokenStream tokenStream(String fieldName, Reader reader);
+
+
+  /**
+   * Invoked before indexing a Fieldable instance if
+   * terms have already been added to that field.  This allows custom
+   * analyzers to place an automatic position increment gap between
+   * Fieldable instances using the same field name.  The default value
+   * position increment gap is 0.  With a 0 position increment gap and
+   * the typical default token position increment of 1, all terms in a field,
+   * including across Fieldable instances, are in successive positions, allowing
+   * exact PhraseQuery matches, for instance, across Fieldable instance boundaries.
+   *
+   * @param fieldName Fieldable name being indexed.
+   * @return position increment gap, added to the next token emitted from {@link #tokenStream(String,Reader)}
    */
-  public TokenStream tokenStream(Reader reader)
+  public int getPositionIncrementGap(String fieldName)
   {
-	  return tokenStream(null, reader);
+    return 0;
   }
 }
 

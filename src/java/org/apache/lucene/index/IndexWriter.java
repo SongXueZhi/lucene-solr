@@ -16,21 +16,20 @@ package org.apache.lucene.index;
  * limitations under the License.
  */
 
-import java.io.IOException;
-import java.io.File;
-import java.io.PrintStream;
-import java.util.Vector;
-
+import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.document.Document;
+import org.apache.lucene.search.Similarity;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.RAMDirectory;
 import org.apache.lucene.store.FSDirectory;
-import org.apache.lucene.store.Lock;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
-import org.apache.lucene.search.Similarity;
-import org.apache.lucene.util.Constants;
-import org.apache.lucene.document.Document;
-import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.store.Lock;
+import org.apache.lucene.store.RAMDirectory;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.util.Vector;
 
 
 /**
@@ -60,67 +59,69 @@ import org.apache.lucene.analysis.Analyzer;
 public class IndexWriter {
 
   /**
-   * Default value is 1000.  Use <code>org.apache.lucene.writeLockTimeout</code>
-   * system property to override.
+   * Default value for the write lock timeout (1,000).
+   * @see #setDefaultWriteLockTimeout
    */
-  public static long WRITE_LOCK_TIMEOUT =
-    Integer.parseInt(System.getProperty("org.apache.lucene.writeLockTimeout",
-      "1000"));
+ public  static long WRITE_LOCK_TIMEOUT = 
+	    Integer.parseInt(System.getProperty("org.apache.lucene.writeLockTimeout",	
+	      "1000"));
+
+  public static long getWRITE_LOCK_TIMEOUT() {
+	return WRITE_LOCK_TIMEOUT;
+}
+
+public static void setWRITE_LOCK_TIMEOUT(long wRITE_LOCK_TIMEOUT) {
+	WRITE_LOCK_TIMEOUT = wRITE_LOCK_TIMEOUT;
+}
+
+public static long getCOMMIT_LOCK_TIMEOUT() {
+	return COMMIT_LOCK_TIMEOUT;
+}
+
+public static void setCOMMIT_LOCK_TIMEOUT(long cOMMIT_LOCK_TIMEOUT) {
+	COMMIT_LOCK_TIMEOUT = cOMMIT_LOCK_TIMEOUT;
+}
+
+private long writeLockTimeout = WRITE_LOCK_TIMEOUT;
 
   /**
-   * Default value is 10000.  Use <code>org.apache.lucene.commitLockTimeout</code>
-   * system property to override.
+   * Default value for the commit lock timeout (10,000).
+   * @see #setDefaultCommitLockTimeout
    */
-  public static long COMMIT_LOCK_TIMEOUT =
-    Integer.parseInt(System.getProperty("org.apache.lucene.commitLockTimeout",
-      "10000"));
+  public static long COMMIT_LOCK_TIMEOUT =	
+  Integer.parseInt(System.getProperty("org.apache.lucene.commitLockTimeout",	
+    "10000"));
+
+  private long commitLockTimeout = COMMIT_LOCK_TIMEOUT;
 
   public static final String WRITE_LOCK_NAME = "write.lock";
   public static final String COMMIT_LOCK_NAME = "commit.lock";
 
   /**
-   * Default value is 10.  Use <code>org.apache.lucene.mergeFactor</code>
-   * system property to override.
+   * Default value is 10. Change using {@link #setMergeFactor(int)}.
    */
-  public static final int DEFAULT_MERGE_FACTOR =
-    Integer.parseInt(System.getProperty("org.apache.lucene.mergeFactor",
-      "10"));
+  public final static int DEFAULT_MERGE_FACTOR = 10;
 
   /**
-   * Default value is 10.  Use <code>org.apache.lucene.minMergeDocs</code>
-   * system property to override.
+   * Default value is 10. Change using {@link #setMaxBufferedDocs(int)}.
    */
-  public static final int DEFAULT_MIN_MERGE_DOCS =
-    Integer.parseInt(System.getProperty("org.apache.lucene.minMergeDocs",
-      "10"));
+  public final static int DEFAULT_MAX_BUFFERED_DOCS = 10;
 
   /**
-   * Default value is {@link Integer#MAX_VALUE}.
-   * Use <code>org.apache.lucene.maxMergeDocs</code> system property to override.
+   * Default value is {@link Integer#MAX_VALUE}. Change using {@link #setMaxMergeDocs(int)}.
    */
-  public static final int DEFAULT_MAX_MERGE_DOCS =
-    Integer.parseInt(System.getProperty("org.apache.lucene.maxMergeDocs",
-      String.valueOf(Integer.MAX_VALUE)));
+  public final static int DEFAULT_MAX_MERGE_DOCS = Integer.MAX_VALUE;
 
   /**
-   * Default value is 10000.  Use <code>org.apache.lucene.maxFieldLength</code>
-   * system property to override.
+   * Default value is 10,000. Change using {@link #setMaxFieldLength(int)}.
    */
-  public static final int DEFAULT_MAX_FIELD_LENGTH =
-    Integer.parseInt(System.getProperty("org.apache.lucene.maxFieldLength",
-      "10000"));
+  public final static int DEFAULT_MAX_FIELD_LENGTH = 10000;
 
-
-  /** The default value for {@link #getTermIndexInterval()}.  This is
-   * determined by the <code>org.apache.lucene.termIndexInterval</code> system
-   * property.  The default is 128.
+  /**
+   * Default value is 128. Change using {@link #setTermIndexInterval(int)}.
    */
-  public static final int DEFAULT_TERM_INDEX_INTERVAL =
-    Integer.parseInt(System.getProperty("org.apache.lucene.termIndexInterval",
-                                        "128"));
-
-
-
+  public final static int DEFAULT_TERM_INDEX_INTERVAL = 128;
+  
   private Directory directory;  // where this index resides
   private Analyzer analyzer;    // how to analyze text
 
@@ -272,12 +273,12 @@ public class IndexWriter {
       analyzer = a;
 
       Lock writeLock = directory.makeLock(IndexWriter.WRITE_LOCK_NAME);
-      if (!writeLock.obtain(WRITE_LOCK_TIMEOUT)) // obtain write lock
+      if (!writeLock.obtain(writeLockTimeout)) // obtain write lock
         throw new IOException("Index locked for write: " + writeLock);
       this.writeLock = writeLock;                   // save it
 
       synchronized (directory) {        // in- & inter-process sync
-        new Lock.With(directory.makeLock(IndexWriter.COMMIT_LOCK_NAME), COMMIT_LOCK_TIMEOUT) {
+        new Lock.With(directory.makeLock(IndexWriter.COMMIT_LOCK_NAME), commitLockTimeout) {
             public Object doBody() throws IOException {
               if (create)
                 segmentInfos.write(directory);
@@ -338,11 +339,11 @@ public class IndexWriter {
    *
    * <p> The default value is 10.
    * 
-   * @throws IllegalArgumentException if maxBufferedDocs is smaller than 1 
+   * @throws IllegalArgumentException if maxBufferedDocs is smaller than 2
    */
   public void setMaxBufferedDocs(int maxBufferedDocs) {
-    if (maxBufferedDocs < 1)
-      throw new IllegalArgumentException("maxBufferedDocs must at least be 1");
+    if (maxBufferedDocs < 2)
+      throw new IllegalArgumentException("maxBufferedDocs must at least be 2");
     this.minMergeDocs = maxBufferedDocs;
   }
 
@@ -388,6 +389,65 @@ public class IndexWriter {
    */
   public PrintStream getInfoStream() {
     return infoStream;
+  }
+
+  /**
+   * Sets the maximum time to wait for a commit lock (in milliseconds) for this instance of IndexWriter.  @see
+   * @see #setDefaultCommitLockTimeout to change the default value for all instances of IndexWriter.
+   */
+  public void setCommitLockTimeout(long commitLockTimeout) {
+    this.commitLockTimeout = commitLockTimeout;
+  }
+
+  /**
+   * @see #setCommitLockTimeout
+   */
+  public long getCommitLockTimeout() {
+    return commitLockTimeout;
+  }
+
+  /**
+   * Sets the default (for any instance of IndexWriter) maximum time to wait for a commit lock (in milliseconds)
+   */
+  public static void setDefaultCommitLockTimeout(long commitLockTimeout) {
+    IndexWriter.COMMIT_LOCK_TIMEOUT = commitLockTimeout;
+  }
+
+  /**
+   * @see #setDefaultCommitLockTimeout
+   */
+  public static long getDefaultCommitLockTimeout() {
+    return IndexWriter.COMMIT_LOCK_TIMEOUT;
+  }
+
+  /**
+   * Sets the maximum time to wait for a write lock (in milliseconds) for this instance of IndexWriter.  @see
+   * @see #setDefaultWriteLockTimeout to change the default value for all instances of IndexWriter.
+   */
+  public void setWriteLockTimeout(long writeLockTimeout) {
+    this.writeLockTimeout = writeLockTimeout;
+  }
+
+  /**
+   * @see #setWriteLockTimeout
+   */
+  public long getWriteLockTimeout() {
+    return writeLockTimeout;
+  }
+
+  /**
+   * Sets the default (for any instance of IndexWriter) maximum time to wait for a write lock (in
+   * milliseconds).
+   */
+  public static void setDefaultWriteLockTimeout(long writeLockTimeout) {
+    IndexWriter.WRITE_LOCK_TIMEOUT = writeLockTimeout;
+  }
+
+  /**
+   * @see #setDefaultWriteLockTimeout
+   */
+  public static long getDefaultWriteLockTimeout() {
+    return IndexWriter.WRITE_LOCK_TIMEOUT;
   }
 
   /** Flushes all changes to an index and closes all associated files. */
@@ -442,10 +502,9 @@ public class IndexWriter {
    * the expected size.  If you set it to Integer.MAX_VALUE, then the only limit
    * is your memory, but you should anticipate an OutOfMemoryError.<p/>
    * By default, no more than 10,000 terms will be indexed for a field.
-   * 
-   * @deprecated use {@link #setMaxFieldLength} instead
+   *
    */
-  public int maxFieldLength = DEFAULT_MAX_FIELD_LENGTH;
+  private int maxFieldLength = DEFAULT_MAX_FIELD_LENGTH;
 
   /**
    * Adds a document to this index.  If the document contains more than
@@ -490,10 +549,10 @@ public class IndexWriter {
    * for batch index creation, and smaller values (< 10) for indices that are
    * interactively maintained.
    *
-   * <p>This must never be less than 2.  The default value is 10.
-   * @deprecated use {@link #setMergeFactor} instead
+   * <p>This must never be less than 2.  The default value is {@link #DEFAULT_MERGE_FACTOR}.
+
    */
-  public int mergeFactor = DEFAULT_MERGE_FACTOR;
+  private int mergeFactor = DEFAULT_MERGE_FACTOR;
 
   /** Determines the minimal number of documents required before the buffered
    * in-memory documents are merging and a new Segment is created.
@@ -501,10 +560,10 @@ public class IndexWriter {
    * large value gives faster indexing.  At the same time, mergeFactor limits
    * the number of files open in a FSDirectory.
    *
-   * <p> The default value is 10.
-   * @deprecated use {@link #setMaxBufferedDocs} instead
+   * <p> The default value is {@link #DEFAULT_MAX_BUFFERED_DOCS}.
+
    */
-  public int minMergeDocs = DEFAULT_MIN_MERGE_DOCS;
+  private int minMergeDocs = DEFAULT_MAX_BUFFERED_DOCS;
 
 
   /** Determines the largest number of documents ever merged by addDocument().
@@ -512,15 +571,15 @@ public class IndexWriter {
    * as this limits the length of pauses while indexing to a few seconds.
    * Larger values are best for batched indexing and speedier searches.
    *
-   * <p>The default value is {@link Integer#MAX_VALUE}.
-   * @deprecated use {@link #setMaxMergeDocs} instead
+   * <p>The default value is {@link #DEFAULT_MAX_MERGE_DOCS}.
+
    */
-  public int maxMergeDocs = DEFAULT_MAX_MERGE_DOCS;
+  private int maxMergeDocs = DEFAULT_MAX_MERGE_DOCS;
 
   /** If non-null, information about merges will be printed to this.
-   * @deprecated use {@link #setInfoStream} instead 
+
    */
-  public PrintStream infoStream = null;
+  private PrintStream infoStream = null;
 
   /** Merges all segments together into a single segment, optimizing an index
       for search. */
@@ -563,7 +622,7 @@ public class IndexWriter {
     
     // merge newly added segments in log(n) passes
     while (segmentInfos.size() > start+mergeFactor) {
-      for (int base = start+1; base < segmentInfos.size(); base++) {
+      for (int base = start; base < segmentInfos.size(); base++) {
         int end = Math.min(segmentInfos.size(), base+mergeFactor);
         if (end-base > 1)
           mergeSegments(base, end);
@@ -605,28 +664,30 @@ public class IndexWriter {
         sReader.close();
 
     synchronized (directory) {			  // in- & inter-process sync
-      new Lock.With(directory.makeLock(COMMIT_LOCK_NAME), COMMIT_LOCK_TIMEOUT) {
+      new Lock.With(directory.makeLock(COMMIT_LOCK_NAME), commitLockTimeout) {
 	  public Object doBody() throws IOException {
 	    segmentInfos.write(directory);	  // commit changes
-	    deleteSegments(segmentsToDelete);  // delete now-unused segments
 	    return null;
 	  }
 	}.run();
     }
     
+    deleteSegments(segmentsToDelete);  // delete now-unused segments
+
     if (useCompoundFile) {
       final Vector filesToDelete = merger.createCompoundFile(mergedName + ".tmp");
       synchronized (directory) { // in- & inter-process sync
-        new Lock.With(directory.makeLock(COMMIT_LOCK_NAME), COMMIT_LOCK_TIMEOUT) {
+        new Lock.With(directory.makeLock(COMMIT_LOCK_NAME), commitLockTimeout) {
           public Object doBody() throws IOException {
             // make compound file visible for SegmentReaders
             directory.renameFile(mergedName + ".tmp", mergedName + ".cfs");
-            // delete now unused files of segment 
-            deleteFiles(filesToDelete);   
             return null;
           }
         }.run();
       }
+
+      // delete now unused files of segment 
+      deleteFiles(filesToDelete);   
     }
   }
 
@@ -704,37 +765,39 @@ public class IndexWriter {
       infoStream.println(" into "+mergedName+" ("+mergedDocCount+" docs)");
     }
 
-    for (int i = end-1; i >= minSegment; i--)     // remove old infos & add new
+    for (int i = end-1; i > minSegment; i--)     // remove old infos & add new
       segmentInfos.remove(i);
-    segmentInfos.addElement(new SegmentInfo(mergedName, mergedDocCount,
+    segmentInfos.set(minSegment, new SegmentInfo(mergedName, mergedDocCount,
                                             directory));
 
     // close readers before we attempt to delete now-obsolete segments
     merger.closeReaders();
 
     synchronized (directory) {                 // in- & inter-process sync
-      new Lock.With(directory.makeLock(COMMIT_LOCK_NAME), COMMIT_LOCK_TIMEOUT) {
+      new Lock.With(directory.makeLock(COMMIT_LOCK_NAME), commitLockTimeout) {
           public Object doBody() throws IOException {
             segmentInfos.write(directory);     // commit before deleting
-            deleteSegments(segmentsToDelete);  // delete now-unused segments
             return null;
           }
         }.run();
     }
     
+    deleteSegments(segmentsToDelete);  // delete now-unused segments
+
     if (useCompoundFile) {
       final Vector filesToDelete = merger.createCompoundFile(mergedName + ".tmp");
       synchronized (directory) { // in- & inter-process sync
-        new Lock.With(directory.makeLock(COMMIT_LOCK_NAME), COMMIT_LOCK_TIMEOUT) {
+        new Lock.With(directory.makeLock(COMMIT_LOCK_NAME), commitLockTimeout) {
           public Object doBody() throws IOException {
             // make compound file visible for SegmentReaders
             directory.renameFile(mergedName + ".tmp", mergedName + ".cfs");
-            // delete now unused files of segment 
-            deleteFiles(filesToDelete);   
             return null;
           }
         }.run();
       }
+
+      // delete now unused files of segment 
+      deleteFiles(filesToDelete);   
     }
   }
 

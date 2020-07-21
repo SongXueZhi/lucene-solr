@@ -1,7 +1,7 @@
 package org.apache.lucene.search;
 
 /**
- * Copyright 2004 The Apache Software Foundation
+ * Copyright 2004,2006 The Apache Software Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@ package org.apache.lucene.search;
  */
 
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.util.ToStringUtils;
+
 import java.io.IOException;
 import java.util.BitSet;
 import java.util.Set;
@@ -53,6 +55,8 @@ extends Query {
     this.filter = filter;
   }
 
+
+
   /**
    * Returns a Weight that applies the filter to the enclosed query's Weight.
    * This is accomplished by overriding the Scorer returned by the Weight.
@@ -66,27 +70,57 @@ extends Query {
       public float getValue() { return weight.getValue(); }
       public float sumOfSquaredWeights() throws IOException { return weight.sumOfSquaredWeights(); }
       public void normalize (float v) { weight.normalize(v); }
-      public Explanation explain (IndexReader ir, int i) throws IOException { return weight.explain (ir, i); }
+      public Explanation explain (IndexReader ir, int i) throws IOException {
+        Explanation inner = weight.explain (ir, i);
+        Filter f = FilteredQuery.this.filter;
+        BitSet matches = f.bits(ir);
+        if (matches.get(i))
+          return inner;
+        Explanation result = new Explanation
+          (0.0f, "failure to match filter: " + f.toString());
+        result.addDetail(inner);
+        return result;
+      }
 
       // return this query
       public Query getQuery() { return FilteredQuery.this; }
 
-      // return a scorer that overrides the enclosed query's score if
-      // the given hit has been filtered out.
-      public Scorer scorer (IndexReader indexReader) throws IOException {
+      // return a filtering scorer
+       public Scorer scorer (IndexReader indexReader) throws IOException {
         final Scorer scorer = weight.scorer (indexReader);
         final BitSet bitset = filter.bits (indexReader);
         return new Scorer (similarity) {
 
-          // pass these methods through to the enclosed scorer
-          public boolean next() throws IOException { return scorer.next(); }
-          public int doc() { return scorer.doc(); }
-          public boolean skipTo (int i) throws IOException { return scorer.skipTo(i); }
-
-          // if the document has been filtered out, set score to 0.0
-          public float score() throws IOException {
-            return (bitset.get(scorer.doc())) ? scorer.score() : 0.0f;
+          public boolean next() throws IOException {
+            do {
+              if (! scorer.next()) {
+                return false;
+              }
+            } while (! bitset.get(scorer.doc()));
+            /* When skipTo() is allowed on scorer it should be used here
+             * in combination with bitset.nextSetBit(...)
+             * See the while loop in skipTo() below.
+             */
+            return true;
           }
+          public int doc() { return scorer.doc(); }
+
+          public boolean skipTo(int i) throws IOException {
+            if (! scorer.skipTo(i)) {
+              return false;
+            }
+            while (! bitset.get(scorer.doc())) {
+              int nextFiltered = bitset.nextSetBit(scorer.doc() + 1);
+              if (nextFiltered == -1) {
+                return false;
+              } else if (! scorer.skipTo(nextFiltered)) {
+                return false;
+              }
+            }
+            return true;
+           }
+
+          public float score() throws IOException { return scorer.score(); }
 
           // add an explanation about whether the document was filtered
           public Explanation explain (int i) throws IOException {
@@ -118,6 +152,10 @@ extends Query {
     return query;
   }
 
+  public Filter getFilter() {
+    return filter;
+  }
+
   // inherit javadoc
   public void extractTerms(Set terms) {
       getQuery().extractTerms(terms);
@@ -125,7 +163,13 @@ extends Query {
 
   /** Prints a user-readable version of this query. */
   public String toString (String s) {
-    return "filtered("+query.toString(s)+")->"+filter;
+    StringBuffer buffer = new StringBuffer();
+    buffer.append("filtered(");
+    buffer.append(query.toString(s));
+    buffer.append(")->");
+    buffer.append(filter);
+    buffer.append(ToStringUtils.boost(getBoost()));
+    return buffer.toString();
   }
 
   /** Returns true iff <code>o</code> is equal to this. */

@@ -22,9 +22,12 @@ import java.util.Collection;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.Set;
 
 
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.util.ToStringUtils;
 
 /** Matches spans which are near one another.  One can specify <i>slop</i>, the
  * maximum number of intervening unmatched positions, as well as whether
@@ -70,7 +73,11 @@ public class SpanNearQuery extends SpanQuery {
   public boolean isInOrder() { return inOrder; }
 
   public String getField() { return field; }
-
+  
+  /** Returns a collection of all terms matched by this query.
+   * @deprecated use extractTerms instead
+   * @see #extractTerms(Set)
+   */
   public Collection getTerms() {
     Collection terms = new ArrayList();
     Iterator i = clauses.iterator();
@@ -80,6 +87,15 @@ public class SpanNearQuery extends SpanQuery {
     }
     return terms;
   }
+  
+  public void extractTerms(Set terms) {
+	    Iterator i = clauses.iterator();
+	    while (i.hasNext()) {
+	      SpanQuery clause = (SpanQuery)i.next();
+	      clause.extractTerms(terms);
+	    }
+  }  
+  
 
   public String toString(String field) {
     StringBuffer buffer = new StringBuffer();
@@ -97,6 +113,7 @@ public class SpanNearQuery extends SpanQuery {
     buffer.append(", ");
     buffer.append(inOrder);
     buffer.append(")");
+    buffer.append(ToStringUtils.boost(getBoost()));
     return buffer.toString();
   }
 
@@ -110,27 +127,48 @@ public class SpanNearQuery extends SpanQuery {
     return new NearSpans(this, reader);
   }
 
+  public Query rewrite(IndexReader reader) throws IOException {
+    SpanNearQuery clone = null;
+    for (int i = 0 ; i < clauses.size(); i++) {
+      SpanQuery c = (SpanQuery)clauses.get(i);
+      SpanQuery query = (SpanQuery) c.rewrite(reader);
+      if (query != c) {                     // clause rewrote: must clone
+        if (clone == null)
+          clone = (SpanNearQuery) this.clone();
+        clone.clauses.set(i,query);
+      }
+    }
+    if (clone != null) {
+      return clone;                        // some clauses rewrote
+    } else {
+      return this;                         // no clauses rewrote
+    }
+  }
+
   /** Returns true iff <code>o</code> is equal to this. */
   public boolean equals(Object o) {
     if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (!(o instanceof SpanNearQuery)) return false;
 
     final SpanNearQuery spanNearQuery = (SpanNearQuery) o;
 
     if (inOrder != spanNearQuery.inOrder) return false;
     if (slop != spanNearQuery.slop) return false;
     if (!clauses.equals(spanNearQuery.clauses)) return false;
-    if (!field.equals(spanNearQuery.field)) return false;
 
-    return true;
+    return getBoost() == spanNearQuery.getBoost();
   }
-  
+
   public int hashCode() {
     int result;
     result = clauses.hashCode();
-    result += slop * 29;
-    result +=  (inOrder ? 1 : 0);
-    result ^= field.hashCode();
+    // Mix bits before folding in things like boost, since it could cancel the
+    // last element of clauses.  This particular mix also serves to
+    // differentiate SpanNearQuery hashcodes from others.
+    result ^= (result << 14) | (result >>> 19);  // reversible
+    result += Float.floatToRawIntBits(getBoost());
+    result += slop;
+    result ^= (inOrder ? 0x99AFD3BD : 0);
     return result;
   }
 }

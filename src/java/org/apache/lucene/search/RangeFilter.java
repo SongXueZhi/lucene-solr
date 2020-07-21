@@ -16,14 +16,13 @@ package org.apache.lucene.search;
  * limitations under the License.
  */
 
-import java.util.BitSet;
-import java.io.IOException;
-
-import org.apache.lucene.search.Filter;
+import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.TermDocs;
 import org.apache.lucene.index.TermEnum;
-import org.apache.lucene.index.IndexReader;
+
+import java.io.IOException;
+import java.util.BitSet;
 
 /**
  * A Filter that restricts search results to a range of values in a given
@@ -31,7 +30,7 @@ import org.apache.lucene.index.IndexReader;
  * 
  * <p>
  * This code borrows heavily from {@link RangeQuery}, but is implemented as a Filter
- * (much like {@link DateFilter}).
+ * 
  * </p>
  */
 public class RangeFilter extends Filter {
@@ -166,5 +165,31 @@ public class RangeFilter extends Filter {
         }
         buffer.append(includeUpper ? "]" : "}");
         return buffer.toString();
+    }
+
+    /** Returns true if <code>o</code> is equal to this. */
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof RangeFilter)) return false;
+        RangeFilter other = (RangeFilter) o;
+
+        if (!this.fieldName.equals(other.fieldName)
+            || this.includeLower != other.includeLower
+            || this.includeUpper != other.includeUpper
+           ) { return false; }
+        if (this.lowerTerm != null ? !this.lowerTerm.equals(other.lowerTerm) : other.lowerTerm != null) return false;
+        if (this.upperTerm != null ? !this.upperTerm.equals(other.upperTerm) : other.upperTerm != null) return false;
+        return true;
+    }
+
+    /** Returns a hash code value for this object.*/
+    public int hashCode() {
+      int h = fieldName.hashCode();
+      h ^= lowerTerm != null ? lowerTerm.hashCode() : 0xB6ECE882;
+      h = (h << 1) | (h >>> 31);  // rotate to distinguish lower from upper
+      h ^= (upperTerm != null ? (upperTerm.hashCode()) : 0x91BEC2C2);
+      h ^= (includeLower ? 0xD484B933 : 0)
+         ^ (includeUpper ? 0x6AE423AC : 0);
+      return h;
     }
 }

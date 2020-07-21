@@ -17,7 +17,7 @@ package org.apache.lucene.index;
  */
 
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
+import org.apache.lucene.document.FieldSelector;
 import org.apache.lucene.search.Similarity;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
@@ -29,8 +29,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
 
 /** IndexReader is an abstract class, providing an interface for accessing an
  index.  Search of an index is done entirely through this abstract interface,
@@ -44,7 +42,7 @@ import java.util.Set;
  document in the index.  These document numbers are ephemeral--they may change
  as documents are added to and deleted from an index.  Clients should thus not
  rely on a given document having the same number between sessions.
- 
+
  <p> An IndexReader can be opened on a directory for which an IndexWriter is
  opened already, but it cannot be used to delete documents from the index then.
 
@@ -52,13 +50,13 @@ import java.util.Set;
  @version $Id$
 */
 public abstract class IndexReader {
-  
+
   public static final class FieldOption {
     private String option;
     private FieldOption() { }
     private FieldOption(String option) {
       this.option = option;
-    } 
+    }
     public String toString() {
       return this.option;
     }
@@ -81,7 +79,7 @@ public abstract class IndexReader {
     // all fields where termvectors with offset and position values set
     public static final FieldOption TERMVECTOR_WITH_POSITION_OFFSET = new FieldOption ("TERMVECTOR_WITH_POSITION_OFFSET");
   }
-  
+
   /**
    * Constructor used if IndexReader is not owner of its directory. 
    * This is used for IndexReaders that are used within other IndexReaders that take care or locking directories.
@@ -91,7 +89,7 @@ public abstract class IndexReader {
   protected IndexReader(Directory directory) {
     this.directory = directory;
   }
-  
+
   /**
    * Constructor used if IndexReader is owner of its directory.
    * If IndexReader is owner of its directory, it locks its directory in case of write operations.
@@ -119,7 +117,7 @@ public abstract class IndexReader {
   private Lock writeLock;
   private boolean stale;
   private boolean hasChanges;
-  
+
 
   /** Returns an IndexReader reading the index in an FSDirectory in the named
    path. */
@@ -132,7 +130,7 @@ public abstract class IndexReader {
   public static IndexReader open(File path) throws IOException {
     return open(FSDirectory.getDirectory(path, false), true);
   }
-  
+
   /** Returns an IndexReader reading the index in the given Directory. */
   public static IndexReader open(final Directory directory) throws IOException {
     return open(directory, false);
@@ -153,7 +151,7 @@ public abstract class IndexReader {
             for (int i = 0; i < infos.size(); i++)
               readers[i] = SegmentReader.get(infos.info(i));
             return new MultiReader(directory, infos, closeDirectory, readers);
-            
+
           }
         }.run();
     }
@@ -162,7 +160,7 @@ public abstract class IndexReader {
   /** Returns the directory this index resides in. */
   public Directory directory() { return directory; }
 
-  /** 
+  /**
    * Returns the time the index in the named directory was last modified.
    * Do not use this to check whether the reader is still up-to-date, use
    * {@link #isCurrent()} instead. 
@@ -171,7 +169,7 @@ public abstract class IndexReader {
     return lastModified(new File(directory));
   }
 
-  /** 
+  /**
    * Returns the time the index in the named directory was last modified. 
    * Do not use this to check whether the reader is still up-to-date, use
    * {@link #isCurrent()} instead. 
@@ -180,7 +178,7 @@ public abstract class IndexReader {
     return FSDirectory.fileModified(directory, IndexFileNames.SEGMENTS);
   }
 
-  /** 
+  /**
    * Returns the time the index in the named directory was last modified. 
    * Do not use this to check whether the reader is still up-to-date, use
    * {@link #isCurrent()} instead. 
@@ -228,9 +226,23 @@ public abstract class IndexReader {
    * @throws IOException if segments file cannot be read.
    */
   public static long getCurrentVersion(Directory directory) throws IOException {
-    return SegmentInfos.readCurrentVersion(directory);
+    synchronized (directory) {                 // in- & inter-process sync
+      Lock commitLock=directory.makeLock(IndexWriter.COMMIT_LOCK_NAME);
+
+      boolean locked=false;
+
+      try {
+         locked=commitLock.obtain(IndexWriter.COMMIT_LOCK_TIMEOUT);
+
+         return SegmentInfos.readCurrentVersion(directory);
+      } finally {
+        if (locked) {
+          commitLock.release();
+        }
+      }
+    }
   }
-  
+
   /**
    * Version number when this IndexReader was opened.
    */
@@ -246,10 +258,21 @@ public abstract class IndexReader {
    * @throws IOException
    */
   public boolean isCurrent() throws IOException {
-    if (SegmentInfos.readCurrentVersion(directory) != segmentInfos.getVersion()) {
-      return false;
+    synchronized (directory) {                 // in- & inter-process sync
+      Lock commitLock=directory.makeLock(IndexWriter.COMMIT_LOCK_NAME);
+
+      boolean locked=false;
+
+      try {
+         locked=commitLock.obtain(IndexWriter.COMMIT_LOCK_TIMEOUT);
+
+         return SegmentInfos.readCurrentVersion(directory) == segmentInfos.getVersion();
+      } finally {
+        if (locked) {
+          commitLock.release();
+        }
+      }
     }
-    return true;
   }
 
   /**
@@ -269,7 +292,7 @@ public abstract class IndexReader {
   abstract public TermFreqVector[] getTermFreqVectors(int docNumber)
           throws IOException;
 
-  
+
   /**
    *  Return a term frequency vector for the specified document and field. The
    *  returned vector contains terms and frequencies for the terms in
@@ -286,7 +309,7 @@ public abstract class IndexReader {
    */
   abstract public TermFreqVector getTermFreqVector(int docNumber, String field)
           throws IOException;
- 
+
   /**
    * Returns <code>true</code> if an index exists at the specified directory.
    * If the directory does not exist or if there is no index in it.
@@ -330,32 +353,65 @@ public abstract class IndexReader {
 
   /** Returns the stored fields of the <code>n</code><sup>th</sup>
    <code>Document</code> in this index. */
-  public abstract Document document(int n) throws IOException;
+  public Document document(int n) throws IOException{
+    return document(n, null);
+  }
+
+  /**
+   * Get the {@link org.apache.lucene.document.Document} at the <code>n</code><sup>th</sup> position. The {@link org.apache.lucene.document.FieldSelector}
+   * may be used to determine what {@link org.apache.lucene.document.Field}s to load and how they should be loaded.
+   * 
+   * <b>NOTE:</b> If this Reader (more specifically, the underlying {@link FieldsReader} is closed before the lazy {@link org.apache.lucene.document.Field} is
+   * loaded an exception may be thrown.  If you want the value of a lazy {@link org.apache.lucene.document.Field} to be available after closing you must
+   * explicitly load it or fetch the Document again with a new loader.
+   * 
+   *  
+   * @param n Get the document at the <code>n</code><sup>th</sup> position
+   * @param fieldSelector The {@link org.apache.lucene.document.FieldSelector} to use to determine what Fields should be loaded on the Document.  May be null, in which case all Fields will be loaded.
+   * @return The stored fields of the {@link org.apache.lucene.document.Document} at the nth position
+   * @throws IOException If there is a problem reading this document
+   * 
+   * @see org.apache.lucene.document.Fieldable
+   * @see org.apache.lucene.document.FieldSelector
+   * @see org.apache.lucene.document.SetBasedFieldSelector
+   * @see org.apache.lucene.document.LoadFirstFieldSelector
+   */
+  //When we convert to JDK 1.5 make this Set<String>
+  public abstract Document document(int n, FieldSelector fieldSelector) throws IOException;
+  
+  
 
   /** Returns true if document <i>n</i> has been deleted */
   public abstract boolean isDeleted(int n);
 
   /** Returns true if any documents have been deleted */
   public abstract boolean hasDeletions();
-  
+
+  /** Returns true if there are norms stored for this field. */
+  public boolean hasNorms(String field) throws IOException {
+    // backward compatible implementation.
+    // SegmentReader has an efficient implementation.
+    return norms(field) != null;
+  }
+
   /** Returns the byte-encoded normalization factor for the named field of
    * every document.  This is used by the search code to score documents.
    *
-   * @see Field#setBoost(float)
+   * @see org.apache.lucene.document.Field#setBoost(float)
    */
   public abstract byte[] norms(String field) throws IOException;
 
   /** Reads the byte-encoded normalization factor for the named field of every
    *  document.  This is used by the search code to score documents.
    *
-   * @see Field#setBoost(float)
+   * @see org.apache.lucene.document.Field#setBoost(float)
    */
   public abstract void norms(String field, byte[] bytes, int offset)
     throws IOException;
 
   /** Expert: Resets the normalization factor for the named field of the named
    * document.  The norm represents the product of the field's {@link
-   * Field#setBoost(float) boost} and its {@link Similarity#lengthNorm(String,
+   * Fieldable#setBoost(float) boost} and its {@link Similarity#lengthNorm(String,
    * int) length normalization}.  Thus, to preserve the length normalization
    * values when resetting this, one should base the new value upon the old.
    *
@@ -369,9 +425,9 @@ public abstract class IndexReader {
     doSetNorm(doc, field, value);
     hasChanges = true;
   }
-          
+
   /** Implements setNorm in subclass.*/
-  protected abstract void doSetNorm(int doc, String field, byte value) 
+  protected abstract void doSetNorm(int doc, String field, byte value)
           throws IOException;
 
   /** Expert: Resets the normalization factor for the named field of the named
@@ -470,7 +526,8 @@ public abstract class IndexReader {
       }
     }
   }
-  
+
+
   /** Deletes the document numbered <code>docNum</code>.  Once a document is
    * deleted it will not appear in TermDocs or TermPostitions enumerations.
    * Attempts to read its field with the {@link #document}
@@ -478,34 +535,36 @@ public abstract class IndexReader {
    * reflected in the {@link #docFreq} statistic, though
    * this will be corrected eventually as the index is further modified.
    */
-  public final synchronized void delete(int docNum) throws IOException {
+  public final synchronized void deleteDocument(int docNum) throws IOException {
     if(directoryOwner)
       aquireWriteLock();
     doDelete(docNum);
     hasChanges = true;
   }
 
+
   /** Implements deletion of the document numbered <code>docNum</code>.
-   * Applications should call {@link #delete(int)} or {@link #delete(Term)}.
+   * Applications should call {@link #deleteDocument(int)} or {@link #deleteDocuments(Term)}.
    */
   protected abstract void doDelete(int docNum) throws IOException;
+
 
   /** Deletes all documents containing <code>term</code>.
    * This is useful if one uses a document field to hold a unique ID string for
    * the document.  Then to delete such a document, one merely constructs a
    * term with the appropriate field and the unique ID string as its text and
    * passes it to this method.
-   * See {@link #delete(int)} for information about when this deletion will 
+   * See {@link #deleteDocument(int)} for information about when this deletion will 
    * become effective.
    * @return the number of documents deleted
    */
-  public final int delete(Term term) throws IOException {
+  public final int deleteDocuments(Term term) throws IOException {
     TermDocs docs = termDocs(term);
     if (docs == null) return 0;
     int n = 0;
     try {
       while (docs.next()) {
-        delete(docs.doc());
+        deleteDocument(docs.doc());
         n++;
       }
     } finally {
@@ -521,7 +580,7 @@ public abstract class IndexReader {
     doUndeleteAll();
     hasChanges = true;
   }
-  
+
   /** Implements actual undeleteAll() in subclass. */
   protected abstract void doUndeleteAll() throws IOException;
 
@@ -553,10 +612,10 @@ public abstract class IndexReader {
     }
     hasChanges = false;
   }
-  
+
   /** Implements commit. */
   protected abstract void doCommit() throws IOException;
-  
+
   /**
    * Closes files associated with this index.
    * Also saves any new deletions to disk.
@@ -579,62 +638,8 @@ public abstract class IndexReader {
       writeLock = null;
     }
   }
-  
-  /**
-   * Returns a list of all unique field names that exist in the index pointed
-   * to by this IndexReader.
-   * @return Collection of Strings indicating the names of the fields
-   * @throws IOException if there is a problem with accessing the index
-   * 
-   * @deprecated  Replaced by {@link #getFieldNames(IndexReader.FieldOption)}
-   */
-  public abstract Collection getFieldNames() throws IOException;
 
-  /**
-   * Returns a list of all unique field names that exist in the index pointed
-   * to by this IndexReader.  The boolean argument specifies whether the fields
-   * returned are indexed or not.
-   * @param indexed <code>true</code> if only indexed fields should be returned;
-   *                <code>false</code> if only unindexed fields should be returned.
-   * @return Collection of Strings indicating the names of the fields
-   * @throws IOException if there is a problem with accessing the index
-   * 
-   * @deprecated  Replaced by {@link #getFieldNames(IndexReader.FieldOption)}
-   */
-  public abstract Collection getFieldNames(boolean indexed) throws IOException;
 
-  /**
-   * 
-   * @param storedTermVector if true, returns only Indexed fields that have term vector info, 
-   *                        else only indexed fields without term vector info 
-   * @return Collection of Strings indicating the names of the fields
-   * 
-   * @deprecated  Replaced by {@link #getFieldNames(IndexReader.FieldOption)}
-   */ 
-  public Collection getIndexedFieldNames(boolean storedTermVector){
-    if(storedTermVector){
-      Set fieldSet = new HashSet();
-      fieldSet.addAll(getIndexedFieldNames(Field.TermVector.YES));
-      fieldSet.addAll(getIndexedFieldNames(Field.TermVector.WITH_POSITIONS));
-      fieldSet.addAll(getIndexedFieldNames(Field.TermVector.WITH_OFFSETS));
-      fieldSet.addAll(getIndexedFieldNames(Field.TermVector.WITH_POSITIONS_OFFSETS));
-      return fieldSet;
-    }
-    else
-      return getIndexedFieldNames(Field.TermVector.NO);
-  }
-  
-  /**
-   * Get a list of unique field names that exist in this index, are indexed, and have
-   * the specified term vector information.
-   * 
-   * @param tvSpec specifies which term vector information should be available for the fields
-   * @return Collection of Strings indicating the names of the fields
-   * 
-   * @deprecated  Replaced by {@link #getFieldNames(IndexReader.FieldOption)}
-   */
-  public abstract Collection getIndexedFieldNames(Field.TermVector tvSpec);
-  
   /**
    * Get a list of unique field names that exist in this index and have the specified
    * field option information.
@@ -680,7 +685,7 @@ public abstract class IndexReader {
     directory.makeLock(IndexWriter.WRITE_LOCK_NAME).release();
     directory.makeLock(IndexWriter.COMMIT_LOCK_NAME).release();
   }
-  
+
   /**
    * Prints the filename and size of each file within a given compound file.
    * Add the -extract flag to extract files to the current working directory.
@@ -707,7 +712,7 @@ public abstract class IndexReader {
 
     Directory dir = null;
     CompoundFileReader cfr = null;
-      
+
     try {
       File file = new File(filename);
       String dirname = file.getAbsoluteFile().getParent();
@@ -717,7 +722,7 @@ public abstract class IndexReader {
 
       String [] files = cfr.list();
       Arrays.sort(files);   // sort the array of filename so that the output is more readable
-      
+
       for (int i = 0; i < files.length; ++i) {
         long len = cfr.fileLength(files[i]);
 
@@ -726,7 +731,7 @@ public abstract class IndexReader {
           IndexInput ii = cfr.openInput(files[i]);
 
           FileOutputStream f = new FileOutputStream(files[i]);
-          
+
           // read and write with a small buffer, which is more effectiv than reading byte by byte
           byte[] buffer = new byte[1024];
           int chunk = buffer.length;
@@ -736,7 +741,7 @@ public abstract class IndexReader {
             f.write(buffer, 0, bufLen);
             len -= bufLen;
           }
-          
+
           f.close();
           ii.close();
         }

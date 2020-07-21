@@ -16,22 +16,22 @@ package org.apache.lucene.index;
  * limitations under the License.
  */
 
+import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.Token;
+import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.document.Document;
+import org.apache.lucene.document.Fieldable;
+import org.apache.lucene.search.Similarity;
+import org.apache.lucene.store.Directory;
+import org.apache.lucene.store.IndexOutput;
+
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.Reader;
 import java.io.StringReader;
-import java.util.Hashtable;
-import java.util.Enumeration;
 import java.util.Arrays;
-
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.Token;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.IndexOutput;
-import org.apache.lucene.search.Similarity;
+import java.util.Enumeration;
+import java.util.Hashtable;
 
 final class DocumentWriter {
   private Analyzer analyzer;
@@ -129,12 +129,13 @@ final class DocumentWriter {
           throws IOException {
     Enumeration fields = doc.fields();
     while (fields.hasMoreElements()) {
-      Field field = (Field) fields.nextElement();
+      Fieldable field = (Fieldable) fields.nextElement();
       String fieldName = field.name();
       int fieldNumber = fieldInfos.fieldNumber(fieldName);
 
       int length = fieldLengths[fieldNumber];     // length of field
       int position = fieldPositions[fieldNumber]; // position in field
+      if (length>0) position+=analyzer.getPositionIncrementGap(fieldName);
       int offset = fieldOffsets[fieldNumber];       // offset field
 
       if (field.isIndexed()) {
@@ -371,7 +372,7 @@ final class DocumentWriter {
   private final void writeNorms(String segment) throws IOException { 
     for(int n = 0; n < fieldInfos.size(); n++){
       FieldInfo fi = fieldInfos.fieldInfo(n);
-      if(fi.isIndexed){
+      if(fi.isIndexed && !fi.omitNorms){
         float norm = fieldBoosts[n] * similarity.lengthNorm(fi.name, fieldLengths[n]);
         IndexOutput norms = directory.createOutput(segment + ".f" + n);
         try {

@@ -17,11 +17,23 @@ package org.apache.lucene.index;
  */
 
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.store.Directory;
+import org.apache.lucene.document.Fieldable;
+import org.apache.lucene.document.FieldSelector;
+import org.apache.lucene.document.FieldSelectorResult;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.SortedMap;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.Enumeration;
+import java.util.Set;
+import java.util.HashSet;
+
 
 /** An IndexReader which reads multiple, parallel indexes.  Each index added
  * must have the same number of documents, but typically each contains
@@ -33,11 +45,18 @@ import java.util.*;
  * change rarely and small fields that change more frequently.  The smaller
  * fields may be re-indexed in a new index and both indexes may be searched
  * together.
+ *
+ * <p><strong>Warning:</strong> It is up to you to make sure all indexes
+ * are created and modified the same way. For example, if you add
+ * documents to one index, you need to add the same documents in the
+ * same order to the other indexes. <em>Failure to do so will result in
+ * undefined behavior</em>.
  */
 public class ParallelReader extends IndexReader {
-  private ArrayList readers = new ArrayList();
+  private List readers = new ArrayList();
   private SortedMap fieldToReader = new TreeMap();
-  private ArrayList storedFieldReaders = new ArrayList(); 
+  private Map readerToFields = new HashMap();
+  private List storedFieldReaders = new ArrayList();
 
   private int maxDoc;
   private int numDocs;
@@ -45,7 +64,7 @@ public class ParallelReader extends IndexReader {
 
  /** Construct a ParallelReader. */
   public ParallelReader() throws IOException { super(null); }
-    
+
  /** Add an IndexReader. */
   public void add(IndexReader reader) throws IOException {
     add(reader, false);
@@ -53,7 +72,13 @@ public class ParallelReader extends IndexReader {
 
  /** Add an IndexReader whose stored fields will not be returned.  This can
   * accellerate search when stored fields are only needed from a subset of
-  * the IndexReaders. */
+  * the IndexReaders.
+  *
+  * @throws IllegalArgumentException if not all indexes contain the same number
+  *     of documents
+  * @throws IllegalArgumentException if not all indexes have the same value
+  *     of {@link IndexReader#maxDoc()}
+  */
   public void add(IndexReader reader, boolean ignoreStoredFields)
     throws IOException {
 
@@ -69,8 +94,10 @@ public class ParallelReader extends IndexReader {
     if (reader.numDocs() != numDocs)
       throw new IllegalArgumentException
         ("All readers must have same numDocs: "+numDocs+"!="+reader.numDocs());
-    
-    Iterator i = reader.getFieldNames().iterator();
+
+    Collection fields = reader.getFieldNames(IndexReader.FieldOption.ALL);
+    readerToFields.put(reader, fields);
+    Iterator i = fields.iterator();
     while (i.hasNext()) {                         // update fieldToReader map
       String field = (String)i.next();
       if (fieldToReader.get(field) == null)
@@ -79,9 +106,8 @@ public class ParallelReader extends IndexReader {
 
     if (!ignoreStoredFields)
       storedFieldReaders.add(reader);             // add to storedFieldReaders
-
+    readers.add(reader);
   }
-
 
   public int numDocs() { return numDocs; }
 
@@ -99,7 +125,7 @@ public class ParallelReader extends IndexReader {
   // delete in all readers
   protected void doDelete(int n) throws IOException {
     for (int i = 0; i < readers.size(); i++) {
-      ((IndexReader)readers.get(i)).doDelete(n);
+      ((IndexReader)readers.get(i)).deleteDocument(n);
     }
     hasDeletions = true;
   }
@@ -107,19 +133,31 @@ public class ParallelReader extends IndexReader {
   // undeleteAll in all readers
   protected void doUndeleteAll() throws IOException {
     for (int i = 0; i < readers.size(); i++) {
-      ((IndexReader)readers.get(i)).doUndeleteAll();
+      ((IndexReader)readers.get(i)).undeleteAll();
     }
     hasDeletions = false;
   }
 
   // append fields from storedFieldReaders
-  public Document document(int n) throws IOException {
+  public Document document(int n, FieldSelector fieldSelector) throws IOException {
     Document result = new Document();
     for (int i = 0; i < storedFieldReaders.size(); i++) {
       IndexReader reader = (IndexReader)storedFieldReaders.get(i);
-      Enumeration fields = reader.document(n).fields();
-      while (fields.hasMoreElements()) {
-        result.add((Field)fields.nextElement());
+
+      boolean include = (fieldSelector==null);
+      if (!include) {
+        Iterator it = ((Collection) readerToFields.get(reader)).iterator();
+        while (it.hasNext())
+          if (fieldSelector.accept((String)it.next())!=FieldSelectorResult.NO_LOAD) {
+            include = true;
+            break;
+          }
+      }
+      if (include) {
+        Enumeration fields = reader.document(n, fieldSelector).fields();
+        while (fields.hasMoreElements()) {
+          result.add((Fieldable)fields.nextElement());
+        }
       }
     }
     return result;
@@ -131,8 +169,8 @@ public class ParallelReader extends IndexReader {
     Iterator i = fieldToReader.entrySet().iterator();
     while (i.hasNext()) {
       Map.Entry e = (Map.Entry)i.next();
-      IndexReader reader = (IndexReader)e.getKey();
-      String field = (String)e.getValue();
+      String field = (String)e.getKey();
+      IndexReader reader = (IndexReader)e.getValue();
       TermFreqVector vector = reader.getTermFreqVector(n, field);
       if (vector != null)
         results.add(vector);
@@ -143,21 +181,32 @@ public class ParallelReader extends IndexReader {
 
   public TermFreqVector getTermFreqVector(int n, String field)
     throws IOException {
-    return ((IndexReader)fieldToReader.get(field)).getTermFreqVector(n, field);
+    IndexReader reader = ((IndexReader)fieldToReader.get(field));
+    return reader==null ? null : reader.getTermFreqVector(n, field);
+  }
+
+  public boolean hasNorms(String field) throws IOException {
+    IndexReader reader = ((IndexReader)fieldToReader.get(field));
+    return reader==null ? false : reader.hasNorms(field);
   }
 
   public byte[] norms(String field) throws IOException {
-    return ((IndexReader)fieldToReader.get(field)).norms(field);
+    IndexReader reader = ((IndexReader)fieldToReader.get(field));
+    return reader==null ? null : reader.norms(field);
   }
 
   public void norms(String field, byte[] result, int offset)
     throws IOException {
-     ((IndexReader)fieldToReader.get(field)).norms(field, result, offset);
+    IndexReader reader = ((IndexReader)fieldToReader.get(field));
+    if (reader!=null)
+      reader.norms(field, result, offset);
   }
 
   protected void doSetNorm(int n, String field, byte value)
     throws IOException {
-    ((IndexReader)fieldToReader.get(field)).doSetNorm(n, field, value);
+    IndexReader reader = ((IndexReader)fieldToReader.get(field));
+    if (reader!=null)
+      reader.doSetNorm(n, field, value);
   }
 
   public TermEnum terms() throws IOException {
@@ -169,7 +218,8 @@ public class ParallelReader extends IndexReader {
   }
 
   public int docFreq(Term term) throws IOException {
-    return ((IndexReader)fieldToReader.get(term.field())).docFreq(term);
+    IndexReader reader = ((IndexReader)fieldToReader.get(term.field()));
+    return reader==null ? 0 : reader.docFreq(term);
   }
 
   public TermDocs termDocs(Term term) throws IOException {
@@ -198,29 +248,6 @@ public class ParallelReader extends IndexReader {
       ((IndexReader)readers.get(i)).close();
   }
 
-  public Collection getFieldNames() throws IOException {
-    return fieldToReader.keySet();
-  }
-
-  public Collection getFieldNames(boolean indexed) throws IOException {
-    Set fieldSet = new HashSet();
-    for (int i = 0; i < readers.size(); i++) {
-      IndexReader reader = ((IndexReader)readers.get(i));
-      Collection names = reader.getFieldNames(indexed);
-      fieldSet.addAll(names);
-    }
-    return fieldSet;
-  }
-
-  public Collection getIndexedFieldNames (Field.TermVector tvSpec){
-    Set fieldSet = new HashSet();
-    for (int i = 0; i < readers.size(); i++) {
-      IndexReader reader = ((IndexReader)readers.get(i));
-      Collection names = reader.getIndexedFieldNames(tvSpec);
-      fieldSet.addAll(names);
-    }
-    return fieldSet;
-  }
 
   public Collection getFieldNames (IndexReader.FieldOption fieldNames) {
     Set fieldSet = new HashSet();
@@ -234,6 +261,7 @@ public class ParallelReader extends IndexReader {
 
   private class ParallelTermEnum extends TermEnum {
     private String field;
+    private Iterator fieldIterator;
     private TermEnum termEnum;
 
     public ParallelTermEnum() throws IOException {
@@ -241,38 +269,60 @@ public class ParallelReader extends IndexReader {
       if (field != null)
         termEnum = ((IndexReader)fieldToReader.get(field)).terms();
     }
-    
+
     public ParallelTermEnum(Term term) throws IOException {
       field = term.field();
-      termEnum = ((IndexReader)fieldToReader.get(field)).terms(term);
+      IndexReader reader = ((IndexReader)fieldToReader.get(field));
+      if (reader!=null)
+        termEnum = reader.terms(term);
     }
-    
+
     public boolean next() throws IOException {
-      if (field == null)
+      if (termEnum==null)
         return false;
 
-      boolean next = termEnum.next();
-
-      // still within field?
-      if (next && termEnum.term().field() == field)
+      // another term in this field?
+      if (termEnum.next() && termEnum.term().field()==field)
         return true;                              // yes, keep going
-      
+
       termEnum.close();                           // close old termEnum
 
-      // find the next field, if any
-      field = (String)fieldToReader.tailMap(field).firstKey();
-      if (field != null) {
-        termEnum = ((IndexReader)fieldToReader.get(field)).terms();
-        return true;
+      // find the next field with terms, if any
+      if (fieldIterator==null) {
+        fieldIterator = fieldToReader.tailMap(field).keySet().iterator();
+        fieldIterator.next();                     // Skip field to get next one
       }
-
+      while (fieldIterator.hasNext()) {
+        field = (String) fieldIterator.next();
+        termEnum = ((IndexReader)fieldToReader.get(field)).terms(new Term(field, ""));
+        Term term = termEnum.term();
+        if (term!=null && term.field()==field)
+          return true;
+        else
+          termEnum.close();
+      }
+ 
       return false;                               // no more fields
-        
     }
 
-    public Term term() { return termEnum.term(); }
-    public int docFreq() { return termEnum.docFreq(); }
-    public void close() throws IOException { termEnum.close(); }
+    public Term term() {
+      if (termEnum==null)
+        return null;
+
+      return termEnum.term();
+    }
+
+    public int docFreq() {
+      if (termEnum==null)
+        return 0;
+
+      return termEnum.docFreq();
+    }
+
+    public void close() throws IOException {
+      if (termEnum!=null)
+        termEnum.close();
+    }
 
   }
 
@@ -287,24 +337,39 @@ public class ParallelReader extends IndexReader {
     public int freq() { return termDocs.freq(); }
 
     public void seek(Term term) throws IOException {
-      termDocs = ((IndexReader)fieldToReader.get(term.field())).termDocs(term);
+      IndexReader reader = ((IndexReader)fieldToReader.get(term.field()));
+      termDocs = reader!=null ? reader.termDocs(term) : null;
     }
 
     public void seek(TermEnum termEnum) throws IOException {
       seek(termEnum.term());
     }
 
-    public boolean next() throws IOException { return termDocs.next(); }
+    public boolean next() throws IOException {
+      if (termDocs==null)
+        return false;
+
+      return termDocs.next();
+    }
 
     public int read(final int[] docs, final int[] freqs) throws IOException {
+      if (termDocs==null)
+        return 0;
+
       return termDocs.read(docs, freqs);
     }
 
     public boolean skipTo(int target) throws IOException {
+      if (termDocs==null)
+        return false;
+
       return termDocs.skipTo(target);
     }
 
-    public void close() throws IOException { termDocs.close(); }
+    public void close() throws IOException {
+      if (termDocs!=null)
+        termDocs.close();
+    }
 
   }
 
@@ -315,11 +380,12 @@ public class ParallelReader extends IndexReader {
     public ParallelTermPositions(Term term) throws IOException { seek(term); }
 
     public void seek(Term term) throws IOException {
-      termDocs = ((IndexReader)fieldToReader.get(term.field()))
-        .termPositions(term);
+      IndexReader reader = ((IndexReader)fieldToReader.get(term.field()));
+      termDocs = reader!=null ? reader.termPositions(term) : null;
     }
 
     public int nextPosition() throws IOException {
+      // It is an error to call this if there is no next position, e.g. if termDocs==null
       return ((TermPositions)termDocs).nextPosition();
     }
 

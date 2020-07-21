@@ -16,24 +16,18 @@ package org.apache.lucene.index;
  * limitations under the License.
  */
 
-import java.io.IOException;
-import java.util.Collection;
-import java.util.Enumeration;
-import java.util.HashSet;
-import java.util.Hashtable;
-import java.util.Set;
-import java.util.Vector;
-
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
+import org.apache.lucene.document.FieldSelector;
+import org.apache.lucene.search.DefaultSimilarity;
+import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
-import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.BitVector;
 
+import java.io.IOException;
+import java.util.*;
+
 /**
- * FIXME: Describe class <code>SegmentReader</code> here.
- *
  * @version $Id$
  */
 class SegmentReader extends IndexReader {
@@ -58,9 +52,9 @@ class SegmentReader extends IndexReader {
   CompoundFileReader cfsReader = null;
 
   private class Norm {
-    public Norm(IndexInput in, int number) 
-    { 
-      this.in = in; 
+    public Norm(IndexInput in, int number)
+    {
+      this.in = in;
       this.number = number;
     }
 
@@ -80,7 +74,7 @@ class SegmentReader extends IndexReader {
       String fileName;
       if(cfsReader == null)
           fileName = segment + ".f" + number;
-      else{ 
+      else{
           // use a different file name if we have compound format
           fileName = segment + ".s" + number;
       }
@@ -92,7 +86,7 @@ class SegmentReader extends IndexReader {
   private Hashtable norms = new Hashtable();
 
   /** The class which implements SegmentReader. */
-  private static final Class IMPL;
+  private static Class IMPL;
   static {
     try {
       String name =
@@ -100,7 +94,13 @@ class SegmentReader extends IndexReader {
                            SegmentReader.class.getName());
       IMPL = Class.forName(name);
     } catch (ClassNotFoundException e) {
-      throw new RuntimeException("cannot load SegmentReader class: " + e.toString());
+      throw new RuntimeException("cannot load SegmentReader class: " + e, e);
+    } catch (SecurityException se) {
+      try {
+        IMPL = Class.forName(SegmentReader.class.getName());
+      } catch (ClassNotFoundException e) {
+        throw new RuntimeException("cannot load default SegmentReader class: " + e, e);
+      }
     }
   }
 
@@ -123,13 +123,13 @@ class SegmentReader extends IndexReader {
     try {
       instance = (SegmentReader)IMPL.newInstance();
     } catch (Exception e) {
-      throw new RuntimeException("cannot load SegmentReader class: " + e.toString());
+      throw new RuntimeException("cannot load SegmentReader class: " + e, e);
     }
     instance.init(dir, sis, closeDir, ownDir);
     instance.initialize(si);
     return instance;
   }
-          
+
    private void initialize(SegmentInfo si) throws IOException {
     segment = si.name;
 
@@ -160,7 +160,7 @@ class SegmentReader extends IndexReader {
       termVectorsReaderOrig = new TermVectorsReader(cfsDir, segment, fieldInfos);
     }
   }
-   
+
    protected void finalize() {
      // patch for pre-1.4.2 JVMs, whose ThreadLocals leak
      termVectorsLocal.set(null);
@@ -168,14 +168,14 @@ class SegmentReader extends IndexReader {
    }
 
   protected void doCommit() throws IOException {
-    if (deletedDocsDirty) {               // re-write deleted 
+    if (deletedDocsDirty) {               // re-write deleted
       deletedDocs.write(directory(), segment + ".tmp");
       directory().renameFile(segment + ".tmp", segment + ".del");
     }
     if(undeleteAll && directory().fileExists(segment + ".del")){
       directory().deleteFile(segment + ".del");
     }
-    if (normsDirty) {               // re-write norms 
+    if (normsDirty) {               // re-write norms
       Enumeration values = norms.elements();
       while (values.hasMoreElements()) {
         Norm norm = (Norm) values.nextElement();
@@ -188,7 +188,7 @@ class SegmentReader extends IndexReader {
     normsDirty = false;
     undeleteAll = false;
   }
-  
+
   protected void doClose() throws IOException {
     fieldsReader.close();
     tis.close();
@@ -199,8 +199,8 @@ class SegmentReader extends IndexReader {
       proxStream.close();
 
     closeNorms();
-    
-    if (termVectorsReaderOrig != null) 
+
+    if (termVectorsReaderOrig != null)
       termVectorsReaderOrig.close();
 
     if (cfsReader != null)
@@ -219,7 +219,7 @@ class SegmentReader extends IndexReader {
   static boolean usesCompoundFile(SegmentInfo si) throws IOException {
     return si.dir.fileExists(si.name + ".cfs");
   }
-  
+
   static boolean hasSeparateNorms(SegmentInfo si) throws IOException {
     String[] result = si.dir.list();
     String pattern = si.name + ".s";
@@ -256,7 +256,7 @@ class SegmentReader extends IndexReader {
 
     for (int i = 0; i < fieldInfos.size(); i++) {
       FieldInfo fi = fieldInfos.fieldInfo(i);
-      if (fi.isIndexed){
+      if (fi.isIndexed  && !fi.omitNorms){
         String name;
         if(cfsReader == null)
             name = segment + ".f" + i;
@@ -277,11 +277,11 @@ class SegmentReader extends IndexReader {
     return tis.terms(t);
   }
 
-  public synchronized Document document(int n) throws IOException {
+  public synchronized Document document(int n, FieldSelector fieldSelector) throws IOException {
     if (isDeleted(n))
       throw new IllegalArgumentException
               ("attempt to access a deleted document");
-    return fieldsReader.doc(n);
+    return fieldsReader.doc(n, fieldSelector);
   }
 
   public synchronized boolean isDeleted(int n) {
@@ -316,90 +316,10 @@ class SegmentReader extends IndexReader {
   }
 
   /**
-   * @see IndexReader#getFieldNames()
-   * @deprecated  Replaced by {@link #getFieldNames (IndexReader.FieldOption fldOption)}
-   */
-  public Collection getFieldNames() {
-    // maintain a unique set of field names
-    Set fieldSet = new HashSet();
-    for (int i = 0; i < fieldInfos.size(); i++) {
-      FieldInfo fi = fieldInfos.fieldInfo(i);
-      fieldSet.add(fi.name);
-    }
-    return fieldSet;
-  }
-
-  /**
-   * @see IndexReader#getFieldNames(boolean)
-   * @deprecated  Replaced by {@link #getFieldNames (IndexReader.FieldOption fldOption)}
-   */
-  public Collection getFieldNames(boolean indexed) {
-    // maintain a unique set of field names
-    Set fieldSet = new HashSet();
-    for (int i = 0; i < fieldInfos.size(); i++) {
-      FieldInfo fi = fieldInfos.fieldInfo(i);
-      if (fi.isIndexed == indexed)
-        fieldSet.add(fi.name);
-    }
-    return fieldSet;
-  }
-  
-  /**
-   * @see IndexReader#getIndexedFieldNames(Field.TermVector tvSpec)
-   * @deprecated  Replaced by {@link #getFieldNames (IndexReader.FieldOption fldOption)}
-   */
-  public Collection getIndexedFieldNames (Field.TermVector tvSpec){
-    boolean storedTermVector;
-    boolean storePositionWithTermVector;
-    boolean storeOffsetWithTermVector;
-    
-    if(tvSpec == Field.TermVector.NO){
-      storedTermVector = false;
-      storePositionWithTermVector = false;
-      storeOffsetWithTermVector = false;
-    }
-    else if(tvSpec == Field.TermVector.YES){
-      storedTermVector = true;
-      storePositionWithTermVector = false;
-      storeOffsetWithTermVector = false;
-    }
-    else if(tvSpec == Field.TermVector.WITH_POSITIONS){
-      storedTermVector = true;
-      storePositionWithTermVector = true;
-      storeOffsetWithTermVector = false;
-    }
-    else if(tvSpec == Field.TermVector.WITH_OFFSETS){
-      storedTermVector = true;
-      storePositionWithTermVector = false;
-      storeOffsetWithTermVector = true;
-    }
-    else if(tvSpec == Field.TermVector.WITH_POSITIONS_OFFSETS){
-      storedTermVector = true;
-      storePositionWithTermVector = true;
-      storeOffsetWithTermVector = true;
-    }
-    else{
-      throw new IllegalArgumentException("unknown termVector parameter " + tvSpec);
-    }
-    
-    // maintain a unique set of field names
-    Set fieldSet = new HashSet();
-    for (int i = 0; i < fieldInfos.size(); i++) {
-      FieldInfo fi = fieldInfos.fieldInfo(i);
-      if (fi.isIndexed && fi.storeTermVector == storedTermVector && 
-          fi.storePositionWithTermVector == storePositionWithTermVector && 
-          fi.storeOffsetWithTermVector == storeOffsetWithTermVector){
-        fieldSet.add(fi.name);
-      }
-    }
-    return fieldSet;    
-  }
-
-  /**
    * @see IndexReader#getFieldNames(IndexReader.FieldOption fldOption)
    */
   public Collection getFieldNames(IndexReader.FieldOption fieldOption) {
-    
+
     Set fieldSet = new HashSet();
     for (int i = 0; i < fieldInfos.size(); i++) {
       FieldInfo fi = fieldInfos.fieldInfo(i);
@@ -437,17 +357,42 @@ class SegmentReader extends IndexReader {
     }
     return fieldSet;
   }
-  
-  public synchronized byte[] norms(String field) throws IOException {
+
+
+  public synchronized boolean hasNorms(String field) {
+    return norms.containsKey(field);
+  }
+
+  static byte[] createFakeNorms(int size) {
+    byte[] ones = new byte[size];
+    Arrays.fill(ones, DefaultSimilarity.encodeNorm(1.0f));
+    return ones;
+  }
+
+  private byte[] ones;
+  private byte[] fakeNorms() {
+    if (ones==null) ones=createFakeNorms(maxDoc());
+    return ones;
+  }
+
+  // can return null if norms aren't stored
+  protected synchronized byte[] getNorms(String field) throws IOException {
     Norm norm = (Norm) norms.get(field);
-    if (norm == null)                             // not an indexed field
-      return null;
+    if (norm == null) return null;  // not indexed, or norms not stored
+
     if (norm.bytes == null) {                     // value not yet read
       byte[] bytes = new byte[maxDoc()];
       norms(field, bytes, 0);
       norm.bytes = bytes;                         // cache it
     }
     return norm.bytes;
+  }
+
+  // returns fake norms if norms aren't available
+  public synchronized byte[] norms(String field) throws IOException {
+    byte[] bytes = getNorms(field);
+    if (bytes==null) bytes=fakeNorms();
+    return bytes;
   }
 
   protected void doSetNorm(int doc, String field, byte value)
@@ -466,8 +411,10 @@ class SegmentReader extends IndexReader {
     throws IOException {
 
     Norm norm = (Norm) norms.get(field);
-    if (norm == null)
-      return;					  // use zeros in array
+    if (norm == null) {
+      System.arraycopy(fakeNorms(), 0, bytes, offset, maxDoc());
+      return;
+    }
 
     if (norm.bytes != null) {                     // can copy from cache
       System.arraycopy(norm.bytes, 0, bytes, offset, maxDoc());
@@ -483,10 +430,11 @@ class SegmentReader extends IndexReader {
     }
   }
 
+
   private void openNorms(Directory cfsDir) throws IOException {
     for (int i = 0; i < fieldInfos.size(); i++) {
       FieldInfo fi = fieldInfos.fieldInfo(i);
-      if (fi.isIndexed) {
+      if (fi.isIndexed && !fi.omitNorms) {
         // look first if there are separate norms in compound format
         String fileName = segment + ".s" + fi.number;
         Directory d = directory();

@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuite errors="0" failures="0" hostname="MacBook-Pro.local" name="org.apache.lucene.index.TestSegmentReader" skipped="0" tests="7" time="5.173" timestamp="2020-06-07T15:43:58">
+  <properties>
+    <property name="java.vendor" value="Oracle Corporation" />
+    <property name="sun.java.launcher" value="SUN_STANDARD" />
+    <property name="sun.management.compiler" value="HotSpot 64-Bit Tiered Compilers" />
+    <property name="docs.dir" value="/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300/src/test" />
+    <property name="https.proxyHost" value="127.0.0.1" />
+    <property name="os.name" value="Mac OS X" />
+    <property name="sun.boot.class.path" value="/Library/Java/JavaVirtualMachines/jdk1.8.jdk/Contents/Home/jre/lib/resources.jar:/Library/Java/JavaVirtualMachines/jdk1.8.jdk/Contents/Home/jre/lib/rt.jar:/Library/Java/JavaVirtualMachines/jdk1.8.jdk/Contents/Home/jre/lib/sunrsasign.jar:/Library/Java/JavaVirtualMachines/jdk1.8.jdk/Contents/Home/jre/lib/jsse.jar:/Library/Java/JavaVirtualMachines/jdk1.8.jdk/Contents/Home/jre/lib/jce.jar:/Library/Java/JavaVirtualMachines/jdk1.8.jdk/Contents/Home/jre/lib/charsets.jar:/Library/Java/JavaVirtualMachines/jdk1.8.jdk/Contents/Home/jre/lib/jfr.jar:/Library/Java/JavaVirtualMachines/jdk1.8.jdk/Contents/Home/jre/classes" />
+    <property name="TODAY" value="June 7 2020" />
+    <property name="ant.file.type.common" value="file" />
+    <property name="javac.target" value="1.4" />
+    <property name="java.vm.specification.vendor" value="Oracle Corporation" />
+    <property name="ant.home" value="/Users/knightsong/software/apache-ant-1.10.7" />
+    <property name="java.runtime.version" value="1.8.0_241-b07" />
+    <property name="http.proxyPort" value="1087" />
+    <property name="user.name" value="knightsong" />
+    <property name="current.year" value="2020" />
+    <property name="socksProxyHost" value="127.0.0.1" />
+    <property name="build.dir" value="/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300/build" />
+    <property name="dataDir" value="/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300/src/test" />
+    <property name="javac.deprecation" value="off" />
+    <property name="javadoc.link" value="http://java.sun.com/j2se/1.4/docs/api/" />
+    <property name="user.language" value="zh" />
+    <property name="build.encoding" value="utf-8" />
+    <property name="sun.boot.library.path" value="/Library/Java/JavaVirtualMachines/jdk1.8.jdk/Contents/Home/jre/lib" />
+    <property name="ant.file.core" value="/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300/build.xml" />
+    <property name="ant.project.default-target" value="default" />
+    <property name="ant.file.type.core" value="file" />
+    <property name="ant.project.name" value="core" />
+    <property name="DSTAMP" value="2020-06-07" />
+    <property name="index.dir" value="/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300/build/test/index" />
+    <property name="java.version" value="1.8.0_241" />
+    <property name="version" value="2.1-dev" />
+    <property name="user.timezone" value="" />
+    <property name="sun.arch.data.model" value="64" />
+    <property name="javacc.files.uptodate" value="true" />
+    <property name="http.nonProxyHosts" value="127.0.0.1|localhost|*.localhost" />
+    <property name="java.endorsed.dirs" value="/Library/Java/JavaVirtualMachines/jdk1.8.jdk/Contents/Home/jre/lib/endorsed" />
+    <property name="sun.cpu.isalist" value="" />
+    <property name="sun.jnu.encoding" value="UTF-8" />
+    <property name="file.encoding.pkg" value="sun.io" />
+    <property name="file.separator" value="/" />
+    <property name="java.specification.name" value="Java Platform API Specification" />
+    <property name="java.class.version" value="52.0" />
+    <property name="user.country" value="CN" />
+    <property name="java.home" value="/Library/Java/JavaVirtualMachines/jdk1.8.jdk/Contents/Home/jre" />
+    <property name="dist.dir" value="/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300/dist" />
+    <property name="java.vm.info" value="mixed mode" />
+    <property name="ant.file" value="/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300/build.xml" />
+    <property name="os.version" value="10.15.5" />
+    <property name="https.proxyPort" value="1087" />
+    <property name="javac.source" value="1.4" />
+    <property name="javac.debug" value="on" />
+    <property name="path.separator" value=":" />
+    <property name="java.vm.version" value="25.241-b07" />
+    <property name="ant.library.dir" value="/Users/knightsong/software/apache-ant-1.10.7/lib" />
+    <property name="junit.output.dir" value="/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300/build/test" />
+    <property name="java.awt.printerjob" value="sun.lwawt.macosx.CPrinterJob" />
+    <property name="sun.io.unicode.encoding" value="UnicodeBig" />
+    <property name="awt.toolkit" value="sun.lwawt.macosx.LWCToolkit" />
+    <property name="socksNonProxyHosts" value="127.0.0.1|localhost|*.localhost" />
+    <property name="ftp.nonProxyHosts" value="127.0.0.1|localhost|*.localhost" />
+    <property name="user.home" value="/Users/knightsong" />
+    <property name="socksProxyPort" value="1086" />
+    <property name="java.specification.vendor" value="Oracle Corporation" />
+    <property name="java.library.path" value="/Users/knightsong/Library/Java/Extensions:/Library/Java/Extensions:/Network/Library/Java/Extensions:/System/Library/Java/Extensions:/usr/lib/java:." />
+    <property name="name" value="core" />
+    <property name="java.vendor.url" value="http://java.oracle.com/" />
+    <property name="java.vm.vendor" value="Oracle Corporation" />
+    <property name="gopherProxySet" value="false" />
+    <property name="tempDir" value="/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300/build/test" />
+    <property name="java.runtime.name" value="Java(TM) SE Runtime Environment" />
+    <property name="ant.version" value="Apache Ant(TM) version 1.10.7 compiled on September 1 2019" />
+    <property name="year" value="2000-2020" />
+    <property name="java.class.path" value="/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300/build/classes/test:/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300/build/classes/java:/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300/build/classes/demo:/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300/lib/junit-4.1.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-launcher.jar:/Library/Java/JavaVirtualMachines/jdk1.8.jdk/Contents/Home/lib/tools.jar:/Library/Java/JavaVirtualMachines/jdk1.8.jdk/Contents/Home/lib/dt.jar:/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-commons-net.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-xz.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-junit4.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-jai.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-apache-resolver.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-jdepend.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-apache-regexp.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-apache-log4j.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-javamail.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-apache-bcel.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ivy.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-netrexx.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-swing.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-jsch.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-junitlauncher.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-junit.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-imageio.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-antlr.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-testutil.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-apache-oro.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/junit.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-jmf.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-apache-xalan2.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-apache-bsf.jar:/Users/knightsong/software/apache-ant-1.10.7/lib/ant-commons-logging.jar" />
+    <property name="sun.java.command" value="org.apache.tools.ant.taskdefs.optional.junit.JUnitTestRunner org.apache.lucene.index.TestSegmentReader skipNonTests=false filtertrace=true haltOnError=false haltOnFailure=false showoutput=false outputtoformatters=true logfailedtests=true threadid=0 logtestlistenerevents=false formatter=org.apache.tools.ant.taskdefs.optional.junit.XMLJUnitResultFormatter,/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300/build/test/TEST-org.apache.lucene.index.TestSegmentReader.xml formatter=org.apache.tools.ant.taskdefs.optional.junit.BriefJUnitResultFormatter crashfile=/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300/junitvmwatcher6528141314998352982.properties propsfile=/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300/junit5373431075782248127.properties" />
+    <property name="project.name" value="site" />
+    <property name="TSTAMP" value="23:40:40" />
+    <property name="junit.includes" value="**/Test*.java" />
+    <property name="java.vm.specification.name" value="Java Virtual Machine Specification" />
+    <property name="ant.file.type" value="file" />
+    <property name="java.vm.specification.version" value="1.8" />
+    <property name="sun.os.patch.level" value="unknown" />
+    <property name="sun.cpu.endian" value="little" />
+    <property name="java.io.tmpdir" value="/var/folders/8g/0hrn4vt96lsdf_54nd8hb4cc0000gn/T/" />
+    <property name="junit.present" value="true" />
+    <property name="java.vendor.url.bug" value="http://bugreport.sun.com/bugreport/" />
+    <property name="Name" value="Lucene" />
+    <property name="junit.reports" value="/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300/build/test/reports" />
+    <property name="ant.file.common" value="/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300/common-build.xml" />
+    <property name="http.proxyHost" value="127.0.0.1" />
+    <property name="demo.war.name" value="luceneweb" />
+    <property name="java.awt.graphicsenv" value="sun.awt.CGraphicsEnvironment" />
+    <property name="os.arch" value="x86_64" />
+    <property name="demo.name" value="lucene-demos-2.1-dev" />
+    <property name="javacc.home" value="/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300" />
+    <property name="common.dir" value="/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300" />
+    <property name="java.ext.dirs" value="/Users/knightsong/Library/Java/Extensions:/Library/Java/JavaVirtualMachines/jdk1.8.jdk/Contents/Home/jre/lib/ext:/Library/Java/Extensions:/Network/Library/Java/Extensions:/System/Library/Java/Extensions:/usr/lib/java" />
+    <property name="user.dir" value="/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300" />
+    <property name="line.separator" value="&#xa;" />
+    <property name="java.vm.name" value="Java HotSpot(TM) 64-Bit Server VM" />
+    <property name="basedir" value="/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300" />
+    <property name="ant.java.version" value="1.8" />
+    <property name="ant.core.lib" value="/Users/knightsong/software/apache-ant-1.10.7/lib/ant.jar" />
+    <property name="file.encoding" value="UTF-8" />
+    <property name="final.name" value="lucene-core-2.1-dev" />
+    <property name="java.specification.version" value="1.8" />
+    <property name="src.dir" value="/Users/knightsong/Downloads/lucene-solr-13bb6026a77a5cb1d63a5ee31c07b141245f4300/src/java" />
+    <property name="ant.project.invoked-targets" value="test" />
+  </properties>
+  <testcase classname="org.apache.lucene.index.TestSegmentReader" name="testDocument" time="0.065" />
+  <testcase classname="org.apache.lucene.index.TestSegmentReader" name="testDelete" time="0.014" />
+  <testcase classname="org.apache.lucene.index.TestSegmentReader" name="testGetFieldNameVariations" time="0.003" />
+  <testcase classname="org.apache.lucene.index.TestSegmentReader" name="testTerms" time="0.004" />
+  <testcase classname="org.apache.lucene.index.TestSegmentReader" name="testNorms" time="0.003" />
+  <testcase classname="org.apache.lucene.index.TestSegmentReader" name="testTermVectors" time="0.003" />
+  <testcase classname="org.apache.lucene.index.TestSegmentReader" name="test" time="0.002" />
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

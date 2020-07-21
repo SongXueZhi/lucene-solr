@@ -16,14 +16,14 @@ package org.apache.lucene.index;
  * limitations under the License.
  */
 
-import java.io.File;
-import java.io.IOException;
-import java.io.PrintStream;
-
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintStream;
 
 /**
  * A class to modify an index, i.e. to delete and add documents. This
@@ -58,7 +58,7 @@ import org.apache.lucene.store.FSDirectory;
 <font color="#ffffff">&nbsp;&nbsp;&nbsp;&nbsp;</font><font color="#000000">indexModifier.flush</font><font color="#000000">()</font><font color="#000000">;</font><br/>
 <font color="#ffffff">&nbsp;&nbsp;&nbsp;&nbsp;</font><font color="#000000">System.out.println</font><font color="#000000">(</font><font color="#000000">indexModifier.docCount</font><font color="#000000">()&nbsp;</font><font color="#000000">+&nbsp;</font><font color="#2a00ff">&#34;&nbsp;docs&nbsp;in&nbsp;index&#34;</font><font color="#000000">)</font><font color="#000000">;</font><br/>
 <font color="#ffffff">&nbsp;&nbsp;&nbsp;&nbsp;</font><font color="#000000">indexModifier.close</font><font color="#000000">()</font><font color="#000000">;</font></code>
-    
+
    </td>
   <!-- end source code -->
    </tr>
@@ -67,41 +67,41 @@ import org.apache.lucene.store.FSDirectory;
 <!-- =       END of automatically generated HTML code       = -->
 <!-- ======================================================== -->
  *
- * <p>Not all methods of IndexReader and IndexWriter are offered by this 
- * class. If you need access to additional methods, either use those classes 
+ * <p>Not all methods of IndexReader and IndexWriter are offered by this
+ * class. If you need access to additional methods, either use those classes
  * directly or implement your own class that extends <code>IndexModifier</code>.
- *  
+ *
  * <p>Although an instance of this class can be used from more than one
- * thread, you will not get the best performance. You might want to use 
- * IndexReader and IndexWriter directly for that (but you will need to 
+ * thread, you will not get the best performance. You might want to use
+ * IndexReader and IndexWriter directly for that (but you will need to
  * care about synchronization yourself then).
- * 
+ *
  * <p>While you can freely mix calls to add() and delete() using this class,
  * you should batch you calls for best performance. For example, if you
  * want to update 20 documents, you should first delete all those documents,
  * then add all the new documents.
- * 
+ *
  * @author Daniel Naber
  */
 public class IndexModifier {
-  
+
   protected IndexWriter indexWriter = null;
   protected IndexReader indexReader = null;
-  
+
   protected Directory directory = null;
   protected Analyzer analyzer = null;
   protected boolean open = false;
-  
+
   // Lucene defaults:
   protected PrintStream infoStream = null;
   protected boolean useCompoundFile = true;
-  protected int maxBufferedDocs = IndexWriter.DEFAULT_MIN_MERGE_DOCS;
+  protected int maxBufferedDocs = IndexWriter.DEFAULT_MAX_BUFFERED_DOCS;
   protected int maxFieldLength = IndexWriter.DEFAULT_MAX_FIELD_LENGTH;
   protected int mergeFactor = IndexWriter.DEFAULT_MERGE_FACTOR;
 
   /**
    * Open an index with write access.
-   *  
+   *
    * @param directory the index directory
    * @param analyzer the analyzer to use for adding new documents
    * @param create <code>true</code> to create the index or overwrite the existing one;
@@ -113,7 +113,7 @@ public class IndexModifier {
 
   /**
    * Open an index with write access.
-   *  
+   *
    * @param dirName the index directory
    * @param analyzer the analyzer to use for adding new documents
    * @param create <code>true</code> to create the index or overwrite the existing one;
@@ -123,10 +123,10 @@ public class IndexModifier {
     Directory dir = FSDirectory.getDirectory(dirName, create);
     init(dir, analyzer, create);
   }
-  
+
   /**
    * Open an index with write access.
-   *  
+   *
    * @param file the index directory
    * @param analyzer the analyzer to use for adding new documents
    * @param create <code>true</code> to create the index or overwrite the existing one;
@@ -249,30 +249,31 @@ public class IndexModifier {
    * term with the appropriate field and the unique ID string as its text and
    * passes it to this method.  Returns the number of documents deleted.
    * @return the number of documents deleted
-   * @see IndexReader#delete(Term)
+   * @see IndexReader#deleteDocuments(Term)
    * @throws IllegalStateException if the index is closed
    */
-  public int delete(Term term) throws IOException {
+  public int deleteDocuments(Term term) throws IOException {
     synchronized(directory) {
       assureOpen();
       createIndexReader();
-      return indexReader.delete(term);
+      return indexReader.deleteDocuments(term);
     }
   }
 
   /**
    * Deletes the document numbered <code>docNum</code>.
-   * @see IndexReader#delete(int)
+   * @see IndexReader#deleteDocument(int)
    * @throws IllegalStateException if the index is closed
    */
-  public void delete(int docNum) throws IOException {
+  public void deleteDocument(int docNum) throws IOException {
     synchronized(directory) {
       assureOpen();
       createIndexReader();
-      indexReader.delete(docNum);
+      indexReader.deleteDocument(docNum);
     }
   }
-  
+
+
   /**
    * Returns the number of documents currently in this index.
    * @see IndexWriter#docCount()
@@ -320,7 +321,7 @@ public class IndexModifier {
       this.infoStream = infoStream;
     }
   }
-  
+
   /**
    * @throws IOException
    * @see IndexModifier#setInfoStream(PrintStream)
@@ -361,7 +362,7 @@ public class IndexModifier {
       return indexWriter.getUseCompoundFile();
     }
   }
-  
+
   /**
    * The maximum number of terms that will be indexed for a single field in a
    * document.  This limits the amount of memory required for indexing, so that
@@ -397,20 +398,19 @@ public class IndexModifier {
       return indexWriter.getMaxFieldLength();
     }
   }
-  
+
   /**
-   * The maximum number of terms that will be indexed for a single field in a
-   * document.  This limits the amount of memory required for indexing, so that
-   * collections with very large files will not crash the indexing process by
-   * running out of memory.<p/>
-   * Note that this effectively truncates large documents, excluding from the
-   * index terms that occur further in the document.  If you know your source
-   * documents are large, be sure to set this value high enough to accomodate
-   * the expected size.  If you set it to Integer.MAX_VALUE, then the only limit
-   * is your memory, but you should anticipate an OutOfMemoryError.<p/>
-   * By default, no more than 10,000 terms will be indexed for a field.
+   * Determines the minimal number of documents required before the buffered
+   * in-memory documents are merging and a new Segment is created.
+   * Since Documents are merged in a {@link org.apache.lucene.store.RAMDirectory},
+   * large value gives faster indexing.  At the same time, mergeFactor limits
+   * the number of files open in a FSDirectory.
+   *
+   * <p>The default value is 10.
+   *
    * @see IndexWriter#setMaxBufferedDocs(int)
    * @throws IllegalStateException if the index is closed
+   * @throws IllegalArgumentException if maxBufferedDocs is smaller than 2
    */
   public void setMaxBufferedDocs(int maxBufferedDocs) {
     synchronized(directory) {
@@ -443,7 +443,7 @@ public class IndexModifier {
    * for batch index creation, and smaller values (&lt; 10) for indices that are
    * interactively maintained.
    * <p>This must never be less than 2.  The default value is 10.
-   * 
+   *
    * @see IndexWriter#setMergeFactor(int)
    * @throws IllegalStateException if the index is closed
    */
@@ -471,7 +471,7 @@ public class IndexModifier {
 
   /**
    * Close this index, writing all pending changes to disk.
-   * 
+   *
    * @throws IllegalStateException if the index has been closed before already
    */
   public void close() throws IOException {
@@ -488,11 +488,11 @@ public class IndexModifier {
       open = false;
     }
   }
-  
+
   public String toString() {
     return "Index@" + directory;
   }
-  
+
   /*
   // used as an example in the javadoc:
   public static void main(String[] args) throws IOException {
@@ -500,8 +500,8 @@ public class IndexModifier {
     // create an index in /tmp/index, overwriting an existing one:
     IndexModifier indexModifier = new IndexModifier("/tmp/index", analyzer, true);
     Document doc = new Document();
-    doc.add(new Field("id", "1", Field.Store.YES, Field.Index.UN_TOKENIZED));
-    doc.add(new Field("body", "a simple test", Field.Store.YES, Field.Index.TOKENIZED));
+    doc.add(new Fieldable("id", "1", Fieldable.Store.YES, Fieldable.Index.UN_TOKENIZED));
+    doc.add(new Fieldable("body", "a simple test", Fieldable.Store.YES, Fieldable.Index.TOKENIZED));
     indexModifier.addDocument(doc);
     int deleted = indexModifier.delete(new Term("id", "1"));
     System.out.println("Deleted " + deleted + " document");

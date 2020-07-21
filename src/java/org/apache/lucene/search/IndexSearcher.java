@@ -29,6 +29,9 @@ import org.apache.lucene.index.Term;
  * <p>Applications usually need only call the inherited {@link #search(Query)}
  * or {@link #search(Query,Filter)} methods. For performance reasons it is 
  * recommended to open only one IndexSearcher and use it for all of your searches.
+ * 
+ * <p>Note that you can only access Hits from an IndexSearcher as long as it is
+ * not yet closed, otherwise an IOException will be thrown. 
  */
 public class IndexSearcher extends Searcher {
   IndexReader reader;
@@ -92,61 +95,20 @@ public class IndexSearcher extends Searcher {
     if (nDocs <= 0)  // null might be returned from hq.top() below.
       throw new IllegalArgumentException("nDocs must be > 0");
 
-    Scorer scorer = weight.scorer(reader);
-    if (scorer == null)
-      return new TopDocs(0, new ScoreDoc[0]);
-
-    final BitSet bits = filter != null ? filter.bits(reader) : null;
-    final HitQueue hq = new HitQueue(nDocs);
-    final int[] totalHits = new int[1];
-    scorer.score(new HitCollector() {
-        private float minScore = 0.0f;
-        public final void collect(int doc, float score) {
-          if (score > 0.0f &&                     // ignore zeroed buckets
-              (bits==null || bits.get(doc))) {    // skip docs not in bits
-            totalHits[0]++;
-            if (hq.size() < nDocs || score >= minScore) {
-              hq.insert(new ScoreDoc(doc, score));
-              minScore = ((ScoreDoc)hq.top()).score; // maintain minScore
-            }
-          }
-        }
-      });
-
-    ScoreDoc[] scoreDocs = new ScoreDoc[hq.size()];
-    for (int i = hq.size()-1; i >= 0; i--)        // put docs in array
-      scoreDocs[i] = (ScoreDoc)hq.pop();
-
-    return new TopDocs(totalHits[0], scoreDocs);
+    TopDocCollector collector = new TopDocCollector(nDocs);
+    search(weight, filter, collector);
+    return collector.topDocs();
   }
 
   // inherit javadoc
   public TopFieldDocs search(Weight weight, Filter filter, final int nDocs,
                              Sort sort)
       throws IOException {
-    Scorer scorer = weight.scorer(reader);
-    if (scorer == null)
-      return new TopFieldDocs(0, new ScoreDoc[0], sort.fields);
 
-    final BitSet bits = filter != null ? filter.bits(reader) : null;
-    final FieldSortedHitQueue hq =
-      new FieldSortedHitQueue(reader, sort.fields, nDocs);
-    final int[] totalHits = new int[1];
-    scorer.score(new HitCollector() {
-        public final void collect(int doc, float score) {
-          if (score > 0.0f &&			  // ignore zeroed buckets
-              (bits==null || bits.get(doc))) {	  // skip docs not in bits
-            totalHits[0]++;
-            hq.insert(new FieldDoc(doc, score));
-          }
-        }
-      });
-
-    ScoreDoc[] scoreDocs = new ScoreDoc[hq.size()];
-    for (int i = hq.size()-1; i >= 0; i--)        // put docs in array
-      scoreDocs[i] = hq.fillFields ((FieldDoc) hq.pop());
-
-    return new TopFieldDocs(totalHits[0], scoreDocs, hq.getFields());
+    TopFieldDocCollector collector =
+      new TopFieldDocCollector(reader, sort, nDocs);
+    search(weight, filter, collector);
+    return (TopFieldDocs)collector.topDocs();
   }
 
   // inherit javadoc

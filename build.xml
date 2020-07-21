@@ -6,10 +6,7 @@
 
   <import file="common-build.xml"/>
 
-  <!-- Import tests for deprecation compliance.
-       This will be removed for Lucene 2.0
-   -->
-  <import file="build-deprecated.xml"/>
+  
 
   <property name="demo.name" value="lucene-demos-${version}"/>
   <property name="demo.war.name" value="luceneweb"/>
@@ -61,7 +58,7 @@
   <target name="compile-core" depends="common.compile-core"
           description="Compiles core classes, including rmic">
     <rmic classname="org.apache.lucene.search.RemoteSearchable"
-      base="${build.dir}/classes/java">
+      base="${build.dir}/classes/java" stubversion="1.2">
       <classpath refid="classpath"/>
     </rmic>
   </target>
@@ -120,11 +117,11 @@
   <!-- ================================================================== -->
   <!--                                                                    -->
   <!-- ================================================================== -->
-  <target name="docs">
+  <target name="docs" description="Build the website">
     <ant dir="site" inheritAll="false"/>
   </target>
 
-  <target name="javadocs">
+  <target name="javadocs" description="Generate javadoc">
     <mkdir dir="${build.dir}/docs/api"/>
     <invoke-javadoc
       access="protected"
@@ -146,8 +143,11 @@
   <!-- ================================================================== -->
   <!--                                                                    -->
   <!-- ================================================================== -->
-  <target name="package" depends="jar-core, javadocs, jjdoc, war-demo, build-contrib">
+  <target name="package" depends="jar-core, javadocs, war-demo, build-contrib">
     <mkdir dir="${dist.dir}"/>
+  </target>
+
+  <target name="nightly" depends="test, package-tgz">
   </target>
 
   <!-- ================================================================== -->
@@ -288,13 +288,12 @@
       <fileset dir="src">
         <include name="java/org/apache/lucene/analysis/standard/StandardTokenizer.java"/>
         <include name="java/org/apache/lucene/queryParser/QueryParser.java"/>
-        <include name="java/org/apache/lucene/queryParser/precedence/PrecedenceQueryParser.java"/>
         <include name="demo/org/apache/lucene/demo/html/HTMLParser.java"/>
       </fileset>
     </delete>
   </target>
 
-  <target name="javacc" depends="clean-javacc,javacc-StandardAnalyzer,javacc-QueryParser,javacc-PrecedenceQueryParser,javacc-HTMLParser"/>
+  <target name="javacc" depends="clean-javacc,javacc-StandardAnalyzer,javacc-QueryParser,javacc-HTMLParser"/>
 
   <target name="javacc-StandardAnalyzer" depends="init,javacc-check" if="javacc.present">
     <!-- generate this in a build directory so we can exclude ParseException -->
@@ -317,12 +316,6 @@
     />
   </target>
   
-  <target name="javacc-PrecedenceQueryParser" depends="init,javacc-check" if="javacc.present">
-    <invoke-javacc target="src/java/org/apache/lucene/queryParser/precedence/PrecedenceQueryParser.jj"
-                   outputDir="src/java/org/apache/lucene/queryParser/precedence"
-    />
-  </target>
-
   <target name="javacc-HTMLParser" depends="init,javacc-check" if="javacc.present">
     <invoke-javacc target="src/demo/org/apache/lucene/demo/html/HTMLParser.jj"
                    outputDir="src/demo/org/apache/lucene/demo/html"
@@ -352,6 +345,14 @@
     <attribute name="access"/>
     <attribute name="destdir"/>
     <sequential>
+    
+      <condition property="javadoc-1-5-contrib">
+        <equals arg1="1.5" arg2="${ant.java.version}" />
+      </condition>
+      <dirset dir="contrib/gdata-server/src/java" id="gdata-server">
+        <include name="**" if="javadoc-1-5-contrib" />
+      </dirset>
+  
       <javadoc
           overview="src/java/overview.html"
           packagenames="org.apache.lucene.*"
@@ -368,25 +369,48 @@
         <tag name="todo" description="To Do:"/>
 
         <!-- TODO: find a dynamic way to do include multiple source roots -->
+	
         <packageset dir="src/java"/>
+
+	<packageset dir="src/demo"/>
+	
         <packageset dir="contrib/analyzers/src/java"/>
-        <packageset dir="contrib/wordnet/src/java"/>
+        <packageset dir="contrib/ant/src/java"/>
         <packageset dir="contrib/highlighter/src/java"/>
-        <packageset dir="contrib/similarity/src/java"/>
-        <packageset dir="contrib/spellchecker/src/java"/>
-        <packageset dir="contrib/snowball/src/java" excludes="net/"/>
-        <packageset dir="contrib/swing/src/java"/>
+        <packageset dir="contrib/lucli/src/java"/>
         <packageset dir="contrib/memory/src/java"/>
+        <packageset dir="contrib/miscellaneous/src/java"/>
+        <packageset dir="contrib/similarity/src/java"/>
+        <packageset dir="contrib/regex/src/java"/>
+        <packageset dir="contrib/snowball/src/java"/>
+        <packageset dir="contrib/spellchecker/src/java"/>
+        <packageset dir="contrib/surround/src/java"/>
+        <packageset dir="contrib/swing/src/java"/>
+        <packageset dir="contrib/wordnet/src/java"/>
+        
+        <packageset refid="gdata-server" />
 
         <group title="Core" packages="org.apache.*:org.apache.lucene.analysis:org.apache.lucene.analysis.standard*"/>
-        <group title="Analysis" packages="org.apache.lucene.analysis.*"/>
-        <group title="Snowball" packages="org.apache.lucene.analysis.snowball*"/>
-        <group title="Highlighter" packages="org.apache.lucene.search.highlight*"/>
-        <group title="MoreLikeThis" packages="org.apache.lucene.search.similar*"/>
-        <group title="SpellChecker" packages="org.apache.lucene.search.spell*"/>
-        <group title="WordNet" packages="org.apache.lucene.wordnet*"/>
-        <group title="Swing" packages="org.apache.lucene.swing*"/>
-        <group title="Memory" packages="org.apache.lucene.index.memory*"/>
+
+        <group title="Demo" packages="org.apache.lucene.demo*"/>
+
+        <group title="contrib: Analysis" packages="org.apache.lucene.analysis.*"/>
+        <group title="contrib: Ant" packages="org.apache.lucene.ant*"/>
+
+        <group title="contrib: Highlighter" packages="org.apache.lucene.search.highlight*"/>
+        <group title="contrib: GData Server (Java1.5)" packages="org.apache.lucene.gdata.*"/>
+        <group title="contrib: Lucli" packages="lucli*"/>
+        <group title="contrib: Memory" packages="org.apache.lucene.index.memory*"/>
+        <group title="contrib: Miscellaneous " packages="org.apache.lucene.misc*:org.apache.lucene.queryParser.analyzing*:org.apache.lucene.queryParser.precedence*"/>
+        <group title="contrib: MoreLikeThis" packages="org.apache.lucene.search.similar*"/>
+        <group title="contrib: RegEx" packages="org.apache.lucene.search.regex*:org.apache.regexp*"/>
+        <group title="contrib: Snowball" packages="org.apache.lucene.analysis.snowball*:net.sf.snowball*"/>
+	<group title="contrib: SpellChecker" packages="org.apache.lucene.search.spell*"/>
+	<group title="contrib: Surround Parser" packages="org.apache.lucene.queryParser.surround*"/>
+        <group title="contrib: Swing" packages="org.apache.lucene.swing*"/>
+        <group title="contrib: WordNet" packages="org.apache.lucene.wordnet*"/>
+
+	
       </javadoc>
     </sequential>
   </macrodef>

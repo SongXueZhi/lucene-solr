@@ -38,17 +38,17 @@ import java.text.Collator;
  * @see Searcher#search(Query,Filter,int,Sort)
  * @see FieldCache
  */
-class FieldSortedHitQueue
+public class FieldSortedHitQueue
 extends PriorityQueue {
 
   /**
    * Creates a hit queue sorted by the given list of fields.
    * @param reader  Index to use.
-   * @param fields Field names, in priority order (highest priority first).  Cannot be <code>null</code> or empty.
+   * @param fields Fieldable names, in priority order (highest priority first).  Cannot be <code>null</code> or empty.
    * @param size  The number of hits to retain.  Must be greater than zero.
    * @throws IOException
    */
-  FieldSortedHitQueue (IndexReader reader, SortField[] fields, int size)
+  public FieldSortedHitQueue (IndexReader reader, SortField[] fields, int size)
   throws IOException {
     final int n = fields.length;
     comparators = new ScoreDocComparator[n];
@@ -56,7 +56,12 @@ extends PriorityQueue {
     for (int i=0; i<n; ++i) {
       String fieldname = fields[i].getField();
       comparators[i] = getCachedComparator (reader, fieldname, fields[i].getType(), fields[i].getLocale(), fields[i].getFactory());
-      this.fields[i] = new SortField (fieldname, comparators[i].sortType(), fields[i].getReverse());
+      
+      if (comparators[i].sortType() == SortField.STRING) {
+    	  this.fields[i] = new SortField (fieldname, fields[i].getLocale(), fields[i].getReverse());
+      } else {
+    	  this.fields[i] = new SortField (fieldname, comparators[i].sortType(), fields[i].getReverse());
+      }
     }
     initialize (size);
   }
@@ -68,11 +73,29 @@ extends PriorityQueue {
   /** Stores the sort criteria being used. */
   protected SortField[] fields;
 
-  /** Stores the maximum score value encountered, for normalizing.
-   *  we only care about scores greater than 1.0 - if all the scores
-   *  are less than 1.0, we don't have to normalize. */
-  protected float maxscore = 1.0f;
+  /** Stores the maximum score value encountered, needed for normalizing. */
+  protected float maxscore = Float.NEGATIVE_INFINITY;
 
+  /** returns the maximum score encountered by elements inserted via insert()
+   */
+  public float getMaxScore() {
+    return maxscore;
+  }
+
+  // The signature of this method takes a FieldDoc in order to avoid
+  // the unneeded cast to retrieve the score.
+  // inherit javadoc
+  public boolean insert(FieldDoc fdoc) {
+    maxscore = Math.max(maxscore,fdoc.score);
+    return super.insert(fdoc);
+  }
+
+  // This overrides PriorityQueue.insert() so that insert(FieldDoc) that
+  // keeps track of the score isn't accidentally bypassed.  
+  // inherit javadoc
+  public boolean insert(Object fdoc) {
+    return insert((FieldDoc)fdoc);
+  }
 
   /**
    * Returns whether <code>a</code> is less relevant than <code>b</code>.
@@ -83,10 +106,6 @@ extends PriorityQueue {
   protected boolean lessThan (final Object a, final Object b) {
     final ScoreDoc docA = (ScoreDoc) a;
     final ScoreDoc docB = (ScoreDoc) b;
-
-    // keep track of maximum score
-    if (docA.score > maxscore) maxscore = docA.score;
-    if (docB.score > maxscore) maxscore = docB.score;
 
     // run comparators
     final int n = comparators.length;
@@ -118,7 +137,7 @@ extends PriorityQueue {
     for (int i=0; i<n; ++i)
       fields[i] = comparators[i].sortValue(doc);
     doc.fields = fields;
-    if (maxscore > 1.0f) doc.score /= maxscore;   // normalize scores
+    //if (maxscore > 1.0f) doc.score /= maxscore;   // normalize scores
     return doc;
   }
 
@@ -133,10 +152,10 @@ extends PriorityQueue {
   static final Map Comparators = new WeakHashMap();
 
   /** Returns a comparator if it is in the cache. */
-  static ScoreDocComparator lookup (IndexReader reader, String field, int type, Object factory) {
+  static ScoreDocComparator lookup (IndexReader reader, String field, int type, Locale locale, Object factory) {
     FieldCacheImpl.Entry entry = (factory != null)
       ? new FieldCacheImpl.Entry (field, factory)
-      : new FieldCacheImpl.Entry (field, type);
+      : new FieldCacheImpl.Entry (field, type, locale);
     synchronized (Comparators) {
       HashMap readerCache = (HashMap)Comparators.get(reader);
       if (readerCache == null) return null;
@@ -145,10 +164,10 @@ extends PriorityQueue {
   }
 
   /** Stores a comparator into the cache. */
-  static Object store (IndexReader reader, String field, int type, Object factory, Object value) {
+  static Object store (IndexReader reader, String field, int type, Locale locale, Object factory, Object value) {
     FieldCacheImpl.Entry entry = (factory != null)
       ? new FieldCacheImpl.Entry (field, factory)
-      : new FieldCacheImpl.Entry (field, type);
+      : new FieldCacheImpl.Entry (field, type, locale);
     synchronized (Comparators) {
       HashMap readerCache = (HashMap)Comparators.get(reader);
       if (readerCache == null) {
@@ -163,7 +182,7 @@ extends PriorityQueue {
   throws IOException {
     if (type == SortField.DOC) return ScoreDocComparator.INDEXORDER;
     if (type == SortField.SCORE) return ScoreDocComparator.RELEVANCE;
-    ScoreDocComparator comparator = lookup (reader, fieldname, type, factory);
+    ScoreDocComparator comparator = lookup (reader, fieldname, type, locale, factory);
     if (comparator == null) {
       switch (type) {
         case SortField.AUTO:
@@ -185,7 +204,7 @@ extends PriorityQueue {
         default:
           throw new RuntimeException ("unknown field type: "+type);
       }
-      store (reader, fieldname, type, factory, comparator);
+      store (reader, fieldname, type, locale, factory, comparator);
     }
     return comparator;
   }
@@ -193,7 +212,7 @@ extends PriorityQueue {
   /**
    * Returns a comparator for sorting hits according to a field containing integers.
    * @param reader  Index to use.
-   * @param fieldname  Field containg integer values.
+   * @param fieldname  Fieldable containg integer values.
    * @return  Comparator for sorting hits.
    * @throws IOException If an error occurs reading the index.
    */
@@ -224,7 +243,7 @@ extends PriorityQueue {
   /**
    * Returns a comparator for sorting hits according to a field containing floats.
    * @param reader  Index to use.
-   * @param fieldname  Field containg float values.
+   * @param fieldname  Fieldable containg float values.
    * @return  Comparator for sorting hits.
    * @throws IOException If an error occurs reading the index.
    */
@@ -255,7 +274,7 @@ extends PriorityQueue {
   /**
    * Returns a comparator for sorting hits according to a field containing strings.
    * @param reader  Index to use.
-   * @param fieldname  Field containg string values.
+   * @param fieldname  Fieldable containg string values.
    * @return  Comparator for sorting hits.
    * @throws IOException If an error occurs reading the index.
    */
@@ -286,7 +305,7 @@ extends PriorityQueue {
   /**
    * Returns a comparator for sorting hits according to a field containing strings.
    * @param reader  Index to use.
-   * @param fieldname  Field containg string values.
+   * @param fieldname  Fieldable containg string values.
    * @return  Comparator for sorting hits.
    * @throws IOException If an error occurs reading the index.
    */
@@ -317,7 +336,7 @@ extends PriorityQueue {
    * floats or strings.  Once the type is determined, one of the other static methods
    * in this class is called to get the comparator.
    * @param reader  Index to use.
-   * @param fieldname  Field containg values.
+   * @param fieldname  Fieldable containg values.
    * @return  Comparator for sorting hits.
    * @throws IOException If an error occurs reading the index.
    */

@@ -17,7 +17,8 @@ package org.apache.lucene.index;
  */
 
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
+import org.apache.lucene.document.FieldSelector;
+
 
 import java.io.IOException;
 import java.util.Collection;
@@ -101,11 +102,15 @@ public class FilterIndexReader extends IndexReader {
   public int numDocs() { return in.numDocs(); }
   public int maxDoc() { return in.maxDoc(); }
 
-  public Document document(int n) throws IOException { return in.document(n); }
+  public Document document(int n, FieldSelector fieldSelector) throws IOException { return in.document(n, fieldSelector); }
 
   public boolean isDeleted(int n) { return in.isDeleted(n); }
   public boolean hasDeletions() { return in.hasDeletions(); }
   protected void doUndeleteAll() throws IOException { in.undeleteAll(); }
+
+  public boolean hasNorms(String field) throws IOException {
+    return in.hasNorms(field);
+  }
 
   public byte[] norms(String f) throws IOException { return in.norms(f); }
   public void norms(String f, byte[] bytes, int offset) throws IOException {
@@ -126,23 +131,15 @@ public class FilterIndexReader extends IndexReader {
     return in.termPositions();
   }
 
-  protected void doDelete(int n) throws IOException { in.delete(n); }
+  protected void doDelete(int n) throws IOException { in.deleteDocument(n); }
   protected void doCommit() throws IOException { in.commit(); }
   protected void doClose() throws IOException { in.close(); }
 
-  public Collection getFieldNames() throws IOException {
-    return in.getFieldNames();
-  }
 
-  public Collection getFieldNames(boolean indexed) throws IOException {
-    return in.getFieldNames(indexed);
-  }
-
-  public Collection getIndexedFieldNames (Field.TermVector tvSpec){
-    return in.getIndexedFieldNames(tvSpec);
-  }
-  
   public Collection getFieldNames(IndexReader.FieldOption fieldNames) {
     return in.getFieldNames(fieldNames);
   }
+
+  public long getVersion() { return in.getVersion(); }
+  public boolean isCurrent() throws IOException { return in.isCurrent(); }
 }

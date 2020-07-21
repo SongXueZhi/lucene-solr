@@ -16,26 +16,23 @@ package org.apache.lucene.swing.models;
  * limitations under the License.
  */
 
-import org.apache.lucene.store.RAMDirectory;
+import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.WhitespaceAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
-import org.apache.lucene.analysis.WhitespaceAnalyzer;
-import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.document.Fieldable;
 import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.queryParser.MultiFieldQueryParser;
+import org.apache.lucene.search.Hits;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
-import org.apache.lucene.search.Hits;
-import org.apache.lucene.queryParser.MultiFieldQueryParser;
+import org.apache.lucene.store.RAMDirectory;
 
-import java.awt.*;
-import java.awt.event.*;
-import java.util.*;
-import java.util.List;
-
-import javax.swing.*;
 import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
-import javax.swing.table.*;
+import javax.swing.table.AbstractTableModel;
+import javax.swing.table.TableModel;
+import java.util.ArrayList;
 
 
 /**
@@ -176,14 +173,14 @@ public class TableSearcher extends AbstractTableModel {
                 //this will allow us to retrive the results later
                 //and map this table model's row to a row in the decorated
                 //table model
-                document.add(new Field(ROW_NUMBER, "" + row, true, true, true));
+                document.add(new Field(ROW_NUMBER, "" + row, Field.Store.YES, Field.Index.TOKENIZED));
                 //iterate through all columns
                 //index the value keyed by the column name
                 //NOTE: there could be a problem with using column names with spaces
                 for (int column=0; column < tableModel.getColumnCount(); column++){
                     String columnName = tableModel.getColumnName(column);
                     String columnValue = String.valueOf(tableModel.getValueAt(row, column)).toLowerCase();
-                    document.add(new Field(columnName, columnValue, true, true, true));
+                    document.add(new Field(columnName, columnValue, Field.Store.YES, Field.Index.TOKENIZED));
                 }
                 writer.addDocument(document);
             }
@@ -246,7 +243,8 @@ public class TableSearcher extends AbstractTableModel {
             //build a query based on the fields, searchString and cached analyzer
             //NOTE: This is an area for improvement since the MultiFieldQueryParser
             // has some weirdness.
-            Query query = MultiFieldQueryParser.parse(searchString, fields, analyzer);
+            MultiFieldQueryParser parser = new MultiFieldQueryParser(fields, analyzer);
+            Query query = parser.parse(searchString);
             //run the search
             Hits hits = is.search(query);
             //reset this table model with the new results
@@ -274,7 +272,7 @@ public class TableSearcher extends AbstractTableModel {
             //tabble model row that we are mapping to
             for (int t=0; t<hits.length(); t++){
                 Document document = hits.doc(t);
-                Field field = document.getField(ROW_NUMBER);
+                Fieldable field = document.getField(ROW_NUMBER);
                 rowToModelIndex.add(new Integer(field.stringValue()));
             }
         } catch (Exception e){

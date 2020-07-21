@@ -72,10 +72,6 @@ public class MMapDirectory extends FSDirectory {
     public void close() throws IOException {}
   }
 
-  /* Added class MultiMMapIndexInput, Paul Elschot.
-   * Slightly adapted constructor of MMapIndexInput.
-   * Licensed under the Apache License, Version 2.0.
-   */
   private static class MultiMMapIndexInput extends IndexInput {
   
     private ByteBuffer[] buffers;
@@ -178,7 +174,9 @@ public class MMapDirectory extends FSDirectory {
       try {
         clone.seek(getFilePointer());
       } catch(IOException ioe) {
-        throw new RuntimeException(ioe);
+        RuntimeException newException = new RuntimeException(ioe);
+        newException.initCause(ioe);
+        throw newException;
       };
       return clone;
     }

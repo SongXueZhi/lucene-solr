@@ -4,18 +4,7 @@
         <title>Apache Lucene - Mailing Lists</title>
     </properties>
     <body>
-        <section name="General Lucene list">
-            <p>
-              General discussion concerning all Lucene subprojects.
-            </p>
-            <p>
-              <a href="mailto:general-subscribe@lucene.apache.org">Subscribe</a>
-              <a href="mailto:general-unsubscribe@lucene.apache.org">Unsubscribe</a>
-              <a href="http://mail-archives.apache.org/mod_mbox/lucene-general/">Archive</a>
-            </p>
-        </section>
-
-        <section name="Java User list">
+       <section name="Java User list">
             <p>
               This list is for users of Java Lucene to ask questions, share knowledge,
               and discuss issues.
@@ -25,6 +14,8 @@
               <a href="mailto:java-user-unsubscribe@lucene.apache.org">Unsubscribe</a>
               <a href="http://mail-archives.apache.org/mod_mbox/lucene-java-user/">Archive</a>
               (<a href="http://mail-archives.apache.org/mod_mbox/jakarta-lucene-user/">old archive</a>)
+              <a href="http://www.gossamer-threads.com/lists/lucene/java-user/">Alternative
+                archive with search feature</a>
             </p>
         </section>
 
@@ -40,6 +31,8 @@
             <a href="mailto:java-dev-unsubscribe@lucene.apache.org">Unsubscribe</a>
             <a href="http://mail-archives.apache.org/mod_mbox/lucene-java-dev/">Archive</a>
             (<a href="http://mail-archives.apache.org/mod_mbox/jakarta-lucene-dev/">old archive</a>)
+            <a href="http://www.gossamer-threads.com/lists/lucene/java-dev/">Alternative
+              archive with search feature</a>
             <br /><br />
             Commit notifications:
             <a href="mailto:java-commits-subscribe@lucene.apache.org">Subscribe</a>
@@ -79,6 +72,18 @@
           </p>
         </section>
 
+        <section name="General Lucene list">
+            <p>
+              General discussion concerning all Lucene subprojects.
+            </p>
+            <p>
+              <a href="mailto:general-subscribe@lucene.apache.org">Subscribe</a>
+              <a href="mailto:general-unsubscribe@lucene.apache.org">Unsubscribe</a>
+              <a href="http://mail-archives.apache.org/mod_mbox/lucene-general/">Archive</a>
+              <a href="http://www.gossamer-threads.com/lists/lucene/general/">Alternative
+                archive with search feature</a>
+            </p>
+        </section>
 
     </body>
 </document>

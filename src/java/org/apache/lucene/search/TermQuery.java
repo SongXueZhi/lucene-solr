@@ -22,6 +22,7 @@ import java.util.Set;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.TermDocs;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.util.ToStringUtils;
 
 /** A Query that matches documents containing a term.
   This may be combined with other terms with a {@link BooleanQuery}.
@@ -71,7 +72,7 @@ public class TermQuery extends Query {
     public Explanation explain(IndexReader reader, int doc)
       throws IOException {
 
-      Explanation result = new Explanation();
+      ComplexExplanation result = new ComplexExplanation();
       result.setDescription("weight("+getQuery()+" in "+doc+"), product of:");
 
       Explanation idfExpl =
@@ -97,7 +98,7 @@ public class TermQuery extends Query {
 
       // explain field weight
       String field = term.field();
-      Explanation fieldExpl = new Explanation();
+      ComplexExplanation fieldExpl = new ComplexExplanation();
       fieldExpl.setDescription("fieldWeight("+term+" in "+doc+
                                "), product of:");
 
@@ -112,13 +113,15 @@ public class TermQuery extends Query {
       fieldNormExpl.setValue(fieldNorm);
       fieldNormExpl.setDescription("fieldNorm(field="+field+", doc="+doc+")");
       fieldExpl.addDetail(fieldNormExpl);
-
+      
+      fieldExpl.setMatch(Boolean.valueOf(tfExpl.isMatch()));
       fieldExpl.setValue(tfExpl.getValue() *
                          idfExpl.getValue() *
                          fieldNormExpl.getValue());
 
       result.addDetail(fieldExpl);
-
+      result.setMatch(fieldExpl.getMatch());
+      
       // combine them
       result.setValue(queryExpl.getValue() * fieldExpl.getValue());
 
@@ -153,10 +156,7 @@ public class TermQuery extends Query {
       buffer.append(":");
     }
     buffer.append(term.text());
-    if (getBoost() != 1.0f) {
-      buffer.append("^");
-      buffer.append(Float.toString(getBoost()));
-    }
+    buffer.append(ToStringUtils.boost(getBoost()));
     return buffer.toString();
   }
 

@@ -17,11 +17,14 @@ package org.apache.lucene.index;
  */
 
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
+import org.apache.lucene.document.FieldSelector;
 import org.apache.lucene.store.Directory;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Hashtable;
+import java.util.Set;
 
 /** An IndexReader which reads multiple indexes, appending their content.
  *
@@ -99,9 +102,9 @@ public class MultiReader extends IndexReader {
     return maxDoc;
   }
 
-  public Document document(int n) throws IOException {
+  public Document document(int n, FieldSelector fieldSelector) throws IOException {
     int i = readerIndex(n);                          // find segment num
-    return subReaders[i].document(n - starts[i]);    // dispatch to segment reader
+    return subReaders[i].document(n - starts[i], fieldSelector);    // dispatch to segment reader
   }
 
   public boolean isDeleted(int n) {
@@ -114,7 +117,7 @@ public class MultiReader extends IndexReader {
   protected void doDelete(int n) throws IOException {
     numDocs = -1;                             // invalidate cache
     int i = readerIndex(n);                   // find segment num
-    subReaders[i].delete(n - starts[i]);      // dispatch to segment reader
+    subReaders[i].deleteDocument(n - starts[i]);      // dispatch to segment reader
     hasDeletions = true;
   }
 
@@ -122,6 +125,7 @@ public class MultiReader extends IndexReader {
     for (int i = 0; i < subReaders.length; i++)
       subReaders[i].undeleteAll();
     hasDeletions = false;
+    numDocs = -1;                                 // invalidate cache
   }
 
   private int readerIndex(int n) {    // find reader for doc n:
@@ -145,10 +149,25 @@ public class MultiReader extends IndexReader {
     return hi;
   }
 
+  public boolean hasNorms(String field) throws IOException {
+    for (int i = 0; i < subReaders.length; i++) {
+      if (subReaders[i].hasNorms(field)) return true;
+    }
+    return false;
+  }
+
+  private byte[] ones;
+  private byte[] fakeNorms() {
+    if (ones==null) ones=SegmentReader.createFakeNorms(maxDoc());
+    return ones;
+  }
+
   public synchronized byte[] norms(String field) throws IOException {
     byte[] bytes = (byte[])normsCache.get(field);
     if (bytes != null)
       return bytes;          // cache hit
+    if (!hasNorms(field))
+      return fakeNorms();
 
     bytes = new byte[maxDoc()];
     for (int i = 0; i < subReaders.length; i++)
@@ -160,6 +179,7 @@ public class MultiReader extends IndexReader {
   public synchronized void norms(String field, byte[] result, int offset)
     throws IOException {
     byte[] bytes = (byte[])normsCache.get(field);
+    if (bytes==null && !hasNorms(field)) bytes=fakeNorms();
     if (bytes != null)                            // cache hit
       System.arraycopy(bytes, 0, result, offset, maxDoc());
 
@@ -205,45 +225,6 @@ public class MultiReader extends IndexReader {
   protected synchronized void doClose() throws IOException {
     for (int i = 0; i < subReaders.length; i++)
       subReaders[i].close();
-  }
-
-  /**
-   * @see IndexReader#getFieldNames()
-   */
-  public Collection getFieldNames() throws IOException {
-    // maintain a unique set of field names
-    Set fieldSet = new HashSet();
-    for (int i = 0; i < subReaders.length; i++) {
-      IndexReader reader = subReaders[i];
-      Collection names = reader.getFieldNames();
-      fieldSet.addAll(names);
-    }
-    return fieldSet;
-  }
-
-  /**
-   * @see IndexReader#getFieldNames(boolean)
-   */
-  public Collection getFieldNames(boolean indexed) throws IOException {
-    // maintain a unique set of field names
-    Set fieldSet = new HashSet();
-    for (int i = 0; i < subReaders.length; i++) {
-      IndexReader reader = subReaders[i];
-      Collection names = reader.getFieldNames(indexed);
-      fieldSet.addAll(names);
-    }
-    return fieldSet;
-  }
-
-  public Collection getIndexedFieldNames (Field.TermVector tvSpec){
-    // maintain a unique set of field names
-    Set fieldSet = new HashSet();
-    for (int i = 0; i < subReaders.length; i++) {
-      IndexReader reader = subReaders[i];
-      Collection names = reader.getIndexedFieldNames(tvSpec);
-      fieldSet.addAll(names);
-    }
-    return fieldSet;
   }
 
   /**
@@ -396,13 +377,16 @@ class MultiTermDocs implements TermDocs {
     }
   }
 
-  /** As yet unoptimized implementation. */
+ /* A Possible future optimization could skip entire segments */
   public boolean skipTo(int target) throws IOException {
-    do {
-      if (!next())
-        return false;
-    } while (target > doc());
+    if (current != null && current.skipTo(target-base)) {
       return true;
+    } else if (pointer < readers.length) {
+      base = starts[pointer];
+      current = termDocs(pointer++);
+      return skipTo(target);
+    } else
+      return false;
   }
 
   private TermDocs termDocs(int i) throws IOException {

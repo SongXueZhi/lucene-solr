@@ -18,6 +18,7 @@ package org.apache.lucene.store;
 
 import java.io.IOException;
 import java.io.File;
+import java.io.Serializable;
 import java.util.Hashtable;
 import java.util.Enumeration;
 
@@ -30,7 +31,10 @@ import org.apache.lucene.store.IndexOutput;
  *
  * @version $Id$
  */
-public final class RAMDirectory extends Directory {
+public final class RAMDirectory extends Directory implements Serializable {
+
+  private static final long serialVersionUID = 1l;
+
   Hashtable files = new Hashtable();
 
   /** Constructs an empty {@link Directory}. */
@@ -53,16 +57,22 @@ public final class RAMDirectory extends Directory {
   
   private RAMDirectory(Directory dir, boolean closeDir) throws IOException {
     final String[] files = dir.list();
+    byte[] buf = new byte[BufferedIndexOutput.BUFFER_SIZE];
     for (int i = 0; i < files.length; i++) {
       // make place on ram disk
       IndexOutput os = createOutput(files[i]);
       // read current file
       IndexInput is = dir.openInput(files[i]);
       // and copy to ram disk
-      int len = (int) is.length();
-      byte[] buf = new byte[len];
-      is.readBytes(buf, 0, len);
-      os.writeBytes(buf, len);
+      long len = is.length();
+      long readCount = 0;
+      while (readCount < len) {
+        int toRead = readCount + BufferedIndexOutput.BUFFER_SIZE > len ? (int)(len - readCount) : BufferedIndexOutput.BUFFER_SIZE;
+        is.readBytes(buf, 0, toRead);
+        os.writeBytes(buf, toRead);
+        readCount += toRead;
+      }
+
       // graceful cleanup
       is.close();
       os.close();

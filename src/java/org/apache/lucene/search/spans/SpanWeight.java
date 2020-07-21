@@ -18,8 +18,9 @@ package org.apache.lucene.search.spans;
 
 import java.io.IOException;
 
+import java.util.HashSet;
 import java.util.Iterator;
-import java.util.Collection;
+import java.util.Set;
 
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
@@ -29,6 +30,7 @@ import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.Searcher;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Explanation;
+import org.apache.lucene.search.ComplexExplanation;
 import org.apache.lucene.search.Similarity;
 
 class SpanWeight implements Weight {
@@ -38,14 +40,15 @@ class SpanWeight implements Weight {
   private float queryNorm;
   private float queryWeight;
 
-  private Collection terms;
+  private Set terms;
   private SpanQuery query;
 
   public SpanWeight(SpanQuery query, Searcher searcher)
     throws IOException {
     this.similarity = query.getSimilarity(searcher);
     this.query = query;
-    this.terms = query.getTerms();
+    terms=new HashSet();
+    query.extractTerms(terms);
 
     idf = this.query.getSimilarity(searcher).idf(terms, searcher);
   }
@@ -73,7 +76,7 @@ class SpanWeight implements Weight {
   public Explanation explain(IndexReader reader, int doc)
     throws IOException {
 
-    Explanation result = new Explanation();
+    ComplexExplanation result = new ComplexExplanation();
     result.setDescription("weight("+getQuery()+" in "+doc+"), product of:");
     String field = ((SpanQuery)getQuery()).getField();
 
@@ -112,7 +115,7 @@ class SpanWeight implements Weight {
     result.addDetail(queryExpl);
 
     // explain field weight
-    Explanation fieldExpl = new Explanation();
+    ComplexExplanation fieldExpl = new ComplexExplanation();
     fieldExpl.setDescription("fieldWeight("+field+":"+query.toString(field)+
                              " in "+doc+"), product of:");
 
@@ -128,11 +131,13 @@ class SpanWeight implements Weight {
     fieldNormExpl.setDescription("fieldNorm(field="+field+", doc="+doc+")");
     fieldExpl.addDetail(fieldNormExpl);
 
+    fieldExpl.setMatch(Boolean.valueOf(tfExpl.isMatch()));
     fieldExpl.setValue(tfExpl.getValue() *
                        idfExpl.getValue() *
                        fieldNormExpl.getValue());
 
     result.addDetail(fieldExpl);
+    result.setMatch(fieldExpl.getMatch());
 
     // combine them
     result.setValue(queryExpl.getValue() * fieldExpl.getValue());

@@ -19,8 +19,11 @@ package org.apache.lucene.search.spans;
 import java.io.IOException;
 
 import java.util.Collection;
+import java.util.Set;
 
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.util.ToStringUtils;
 
 /** Removes matches which overlap with another SpanQuery. */
 public class SpanNotQuery extends SpanQuery {
@@ -45,7 +48,13 @@ public class SpanNotQuery extends SpanQuery {
 
   public String getField() { return include.getField(); }
 
+  /** Returns a collection of all terms matched by this query.
+   * @deprecated use extractTerms instead
+   * @see #extractTerms(Set)
+   */
   public Collection getTerms() { return include.getTerms(); }
+  
+  public void extractTerms(Set terms) { include.extractTerms(terms); }
 
   public String toString(String field) {
     StringBuffer buffer = new StringBuffer();
@@ -54,6 +63,7 @@ public class SpanNotQuery extends SpanQuery {
     buffer.append(", ");
     buffer.append(exclude.toString(field));
     buffer.append(")");
+    buffer.append(ToStringUtils.boost(getBoost()));
     return buffer.toString();
   }
 
@@ -64,7 +74,7 @@ public class SpanNotQuery extends SpanQuery {
         private boolean moreInclude = true;
 
         private Spans excludeSpans = exclude.getSpans(reader);
-        private boolean moreExclude = true;
+        private boolean moreExclude = excludeSpans.next();
 
         public boolean next() throws IOException {
           if (moreInclude)                        // move to next include
@@ -125,6 +135,47 @@ public class SpanNotQuery extends SpanQuery {
         }
 
       };
+  }
+
+  public Query rewrite(IndexReader reader) throws IOException {
+    SpanNotQuery clone = null;
+
+    SpanQuery rewrittenInclude = (SpanQuery) include.rewrite(reader);
+    if (rewrittenInclude != include) {
+      clone = (SpanNotQuery) this.clone();
+      clone.include = rewrittenInclude;
+    }
+    SpanQuery rewrittenExclude = (SpanQuery) exclude.rewrite(reader);
+    if (rewrittenExclude != exclude) {
+      if (clone == null) clone = (SpanNotQuery) this.clone();
+      clone.exclude = rewrittenExclude;
+    }
+
+    if (clone != null) {
+      return clone;                        // some clauses rewrote
+    } else {
+      return this;                         // no clauses rewrote
+    }
+  }
+
+    /** Returns true iff <code>o</code> is equal to this. */
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (!(o instanceof SpanNotQuery)) return false;
+
+    SpanNotQuery other = (SpanNotQuery)o;
+    return this.include.equals(other.include)
+            && this.exclude.equals(other.exclude)
+            && this.getBoost() == other.getBoost();
+  }
+
+  public int hashCode() {
+    int h = include.hashCode();
+    h = (h<<1) | (h >>> 31);  // rotate left
+    h ^= exclude.hashCode();
+    h = (h<<1) | (h >>> 31);  // rotate left
+    h ^= Float.floatToRawIntBits(getBoost());
+    return h;
   }
 
 }

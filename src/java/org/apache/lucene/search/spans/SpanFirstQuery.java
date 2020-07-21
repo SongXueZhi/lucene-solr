@@ -19,8 +19,11 @@ package org.apache.lucene.search.spans;
 import java.io.IOException;
 
 import java.util.Collection;
+import java.util.Set;
 
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.util.ToStringUtils;
 
 /** Matches spans near the beginning of a field. */
 public class SpanFirstQuery extends SpanQuery {
@@ -42,6 +45,10 @@ public class SpanFirstQuery extends SpanQuery {
 
   public String getField() { return match.getField(); }
 
+  /** Returns a collection of all terms matched by this query.
+   * @deprecated use extractTerms instead
+   * @see #extractTerms(Set)
+   */
   public Collection getTerms() { return match.getTerms(); }
 
   public String toString(String field) {
@@ -51,8 +58,13 @@ public class SpanFirstQuery extends SpanQuery {
     buffer.append(", ");
     buffer.append(end);
     buffer.append(")");
+    buffer.append(ToStringUtils.boost(getBoost()));
     return buffer.toString();
   }
+  
+  public void extractTerms(Set terms) {
+	    match.extractTerms(terms);
+  }  
 
   public Spans getSpans(final IndexReader reader) throws IOException {
     return new Spans() {
@@ -86,5 +98,39 @@ public class SpanFirstQuery extends SpanQuery {
 
       };
   }
+
+  public Query rewrite(IndexReader reader) throws IOException {
+    SpanFirstQuery clone = null;
+
+    SpanQuery rewritten = (SpanQuery) match.rewrite(reader);
+    if (rewritten != match) {
+      clone = (SpanFirstQuery) this.clone();
+      clone.match = rewritten;
+    }
+
+    if (clone != null) {
+      return clone;                        // some clauses rewrote
+    } else {
+      return this;                         // no clauses rewrote
+    }
+  }
+
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (!(o instanceof SpanFirstQuery)) return false;
+
+    SpanFirstQuery other = (SpanFirstQuery)o;
+    return this.end == other.end
+         && this.match.equals(other.match)
+         && this.getBoost() == other.getBoost();
+  }
+
+  public int hashCode() {
+    int h = match.hashCode();
+    h ^= (h << 8) | (h >>> 25);  // reversible
+    h ^= Float.floatToRawIntBits(getBoost()) ^ end;
+    return h;
+  }
+
 
 }
